@@ -1,9 +1,10 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import Home from "./page";
 
 describe("Home", () => {
   afterEach(() => {
+    cleanup();
     vi.restoreAllMocks();
     localStorage.clear();
   });
@@ -42,5 +43,40 @@ describe("Home", () => {
     expect(await screen.findByText("先用低成本实验验证新方向，而不是立刻辞职。")).toBeInTheDocument();
     expect(screen.getByText("现金流只能支撑三个月")).toBeInTheDocument();
     expect(screen.getByText("周末完成一次真实项目")).toBeInTheDocument();
+  });
+
+  it("runs a built-in test case with one click", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        analysis: {
+          title: "产品资源取舍",
+          conclusion: "先验证影响最大且可逆的一条路径。",
+          nodes: [
+            { id: "need", kind: "need", label: "形成共识", detail: "团队需要清晰优先级。" },
+            { id: "constraint", kind: "constraint", label: "只有两名工程师", detail: "并行能力有限。" },
+            { id: "action", kind: "action", label: "做一周验证", detail: "用真实用户反馈排序。" },
+          ],
+          edges: [
+            { source: "need", target: "constraint", relation: "受限于" },
+            { source: "constraint", target: "action", relation: "转化为" },
+          ],
+        },
+        source: "model",
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<Home />);
+
+    expect(screen.getAllByRole("button", { name: /运行案例：/ })).toHaveLength(5);
+    fireEvent.click(screen.getByRole("button", { name: "运行案例：资源有限时先做哪条产品线" }));
+
+    expect(await screen.findByText("先验证影响最大且可逆的一条路径。")).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/constraint-atlas/api/analyze",
+      expect.objectContaining({
+        body: expect.stringContaining("两名工程师"),
+      }),
+    );
   });
 });
