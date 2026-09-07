@@ -4,7 +4,7 @@ export const nodeKinds = ["need", "fact", "constraint", "choice", "action"] as c
 
 export const analysisSchema = z.object({
   title: z.string().min(1).max(80),
-  conclusion: z.string().min(1).max(500),
+  conclusion: z.string().min(1).max(1200),
   nodes: z.array(z.object({
     id: z.string().min(1).max(40),
     kind: z.enum(nodeKinds),
