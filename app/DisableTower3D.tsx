@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import { BookOpen, Box, Crosshair, Layers3 } from "lucide-react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { CSS2DRenderer } from "three/examples/jsm/renderers/CSS2DRenderer.js";
 import type { Analysis } from "./analysis";
 import { buildDisableTower } from "./disableTowerModel";
 import WorldDossierDrawer from "./WorldDossierDrawer";
@@ -53,6 +54,9 @@ export default function DisableTower3D({ input }: { input: Analysis }) {
       const timer = window.setTimeout(() => setUnsupported(true), 0);
       return () => window.clearTimeout(timer);
     }
+    const labelRenderer = new CSS2DRenderer();
+    labelRenderer.domElement.className = "world-label-layer";
+    canvas.parentElement?.appendChild(labelRenderer.domElement);
 
     const scene = new THREE.Scene();
     canvas.dataset.layerCount = String(model.layers.length);
@@ -158,6 +162,7 @@ export default function DisableTower3D({ input }: { input: Analysis }) {
       const height = canvas.clientHeight;
       if (width === 0 || height === 0) return;
       renderer.setSize(width, height, false);
+      labelRenderer.setSize(width, height);
       camera.aspect = width / height;
       camera.updateProjectionMatrix();
     };
@@ -171,6 +176,7 @@ export default function DisableTower3D({ input }: { input: Analysis }) {
       controls.update();
       targetRing.rotation.z += .0025;
       renderer.render(scene, camera);
+      labelRenderer.render(scene, camera);
       canvas.dataset.threeReady = "true";
     };
     animate();
@@ -188,6 +194,7 @@ export default function DisableTower3D({ input }: { input: Analysis }) {
       controlsRef.current = null;
       architectureRef.current = null;
       disposeWorld(scene);
+      labelRenderer.domElement.remove();
       renderer.dispose();
       delete canvas.dataset.layerCount;
       delete canvas.dataset.facetCount;

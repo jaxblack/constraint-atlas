@@ -1,11 +1,12 @@
 import * as THREE from "three";
+import { CSS2DObject } from "three/examples/jsm/renderers/CSS2DRenderer.js";
 import type { DisableTowerModel, TowerFacet, TowerLayer } from "./disableTowerModel";
 import { worldArt } from "./worldArt";
 
 export type FacetVisual = {
   layerID: number;
   meshes: THREE.Mesh[];
-  label: THREE.Sprite;
+  label: CSS2DObject;
   anchor: THREE.Vector3;
 };
 
@@ -69,39 +70,24 @@ function lineLoop(points: THREE.Vector3[], color: number, opacity = .62): THREE.
   return new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(points), new THREE.LineBasicMaterial({ color, transparent: true, opacity }));
 }
 
-function labelSprite(text: string, color: number, width = 1.4): THREE.Sprite {
-  const canvas = document.createElement("canvas");
-  canvas.width = 640;
-  canvas.height = 144;
-  const context = canvas.getContext("2d")!;
-  context.fillStyle = "rgba(247, 241, 224, .94)";
-  context.fillRect(8, 8, 624, 128);
-  context.strokeStyle = `#${color.toString(16).padStart(6, "0")}`;
-  context.lineWidth = 5;
-  context.strokeRect(8, 8, 624, 128);
-  context.fillStyle = "#312e27";
-  context.font = '600 38px "Palatino Linotype", "Microsoft YaHei", serif';
-  context.textAlign = "center";
-  context.textBaseline = "middle";
-  context.fillText(text, 320, 74, 585);
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  texture.flipY = false;
-  texture.premultiplyAlpha = false;
-  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false }));
-  sprite.scale.set(width, width * .225, 1);
-  sprite.renderOrder = 20;
-  return sprite;
+function labelObject(text: string, color: number, kind: "layer" | "facet"): CSS2DObject {
+  const element = document.createElement("span");
+  element.className = `world-3d-label world-3d-label--${kind}`;
+  element.textContent = text;
+  element.style.setProperty("--label-color", `#${color.toString(16).padStart(6, "0")}`);
+  const label = new CSS2DObject(element);
+  label.center.set(.5, .5);
+  return label;
 }
 
-function layerTitle(layer: TowerLayer): THREE.Sprite {
+function layerTitle(layer: TowerLayer): CSS2DObject {
   const art = worldArt[layer.domain];
-  return labelSprite(`${art.latin} · ${layer.label}`, art.color, 2.45);
+  return labelObject(`${art.latin} · ${layer.label}`, art.color, "layer");
 }
 
-function facetLabel(layer: TowerLayer, facet: TowerFacet, anchor: THREE.Vector3): THREE.Sprite {
+function facetLabel(layer: TowerLayer, facet: TowerFacet, anchor: THREE.Vector3): CSS2DObject {
   const art = worldArt[layer.domain];
-  const label = labelSprite(`${facet.label} ${facet.share}%`, art.color);
+  const label = labelObject(`${facet.label} ${facet.share}%`, art.color, "facet");
   label.position.copy(anchor).add(new THREE.Vector3(0, .3, 0));
   identify(label, layer.id, facet.id);
   return label;
@@ -153,13 +139,27 @@ function buildCorpus(ctx: BuildContext, layer: TowerLayer): THREE.Mesh[] {
   dome.scale.y = .47;
   group.add(dome);
 
-  const figure = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints([
-    new THREE.Vector3(0, layer.y + .13, -.52), new THREE.Vector3(0, layer.y + .13, .72),
-    new THREE.Vector3(-.72, layer.y + .13, .18), new THREE.Vector3(.72, layer.y + .13, .18),
-    new THREE.Vector3(0, layer.y + .13, -.5), new THREE.Vector3(-.55, layer.y + .13, -1.02),
-    new THREE.Vector3(0, layer.y + .13, -.5), new THREE.Vector3(.55, layer.y + .13, -1.02),
-  ]), new THREE.LineBasicMaterial({ color: art.color, transparent: true, opacity: .58 }));
-  group.add(figure);
+  const figureCenterY = layer.y + .72;
+  const proportionCircle = lineLoop(Array.from({ length: 64 }, (_, index) => {
+    const angle = index * Math.PI * 2 / 64;
+    return new THREE.Vector3(Math.cos(angle) * .7, figureCenterY + Math.sin(angle) * .7, 0);
+  }), art.accent, .52);
+  const proportionSquare = lineLoop([
+    new THREE.Vector3(-.58, layer.y + .08, 0), new THREE.Vector3(.58, layer.y + .08, 0),
+    new THREE.Vector3(.58, layer.y + 1.35, 0), new THREE.Vector3(-.58, layer.y + 1.35, 0),
+  ], art.color, .46);
+  const body = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints([
+    new THREE.Vector3(0, layer.y + 1.17, .01), new THREE.Vector3(0, layer.y + .48, .01),
+    new THREE.Vector3(-.58, layer.y + .96, .01), new THREE.Vector3(.58, layer.y + .96, .01),
+    new THREE.Vector3(-.48, layer.y + .8, .01), new THREE.Vector3(.48, layer.y + .8, .01),
+    new THREE.Vector3(0, layer.y + .5, .01), new THREE.Vector3(-.43, layer.y + .08, .01),
+    new THREE.Vector3(0, layer.y + .5, .01), new THREE.Vector3(.43, layer.y + .08, .01),
+    new THREE.Vector3(0, layer.y + .5, .01), new THREE.Vector3(-.62, layer.y + .24, .01),
+    new THREE.Vector3(0, layer.y + .5, .01), new THREE.Vector3(.62, layer.y + .24, .01),
+  ]), new THREE.LineBasicMaterial({ color: art.color, transparent: true, opacity: .78 }));
+  const head = new THREE.Mesh(new THREE.TorusGeometry(.11, .018, 8, 32), new THREE.MeshBasicMaterial({ color: art.color, transparent: true, opacity: .82 }));
+  head.position.set(0, layer.y + 1.27, .01);
+  group.add(proportionCircle, proportionSquare, body, head);
 
   const title = layerTitle(layer);
   title.position.set(-2.1, layer.y + .38, 2.62);
@@ -180,6 +180,7 @@ function buildOfficina(ctx: BuildContext, layer: TowerLayer): THREE.Mesh[] {
   const anchors = polygonPoints(2.18, layer.y, 5);
   const roof = polygonPoints(2.22, layer.y + 1.14, 5);
   group.add(lineLoop(roof, art.accent, .68));
+  group.add(lineLoop(polygonPoints(1.18, layer.y + .15, 5), art.color, .48));
 
   layer.facets.forEach((facet, index) => {
     const column = mesh(new THREE.CylinderGeometry(.13, .18, .82, 18), art.color, facet.share > 0 ? .82 : .46, .52);
@@ -192,6 +193,12 @@ function buildOfficina(ctx: BuildContext, layer: TowerLayer): THREE.Mesh[] {
     addHitTarget(ctx, group, hit, layer.id, facet.id);
     const beam = tube([anchors[index].clone().setY(layer.y + .96), roof[index].clone(), new THREE.Vector3(0, layer.y + 1.14, 0)], art.accent, .025, .55);
     group.add(beam);
+    const responsibility = new THREE.Line(new THREE.BufferGeometry().setFromPoints([anchors[index].clone().setY(layer.y + .13), new THREE.Vector3(0, layer.y + .13, 0)]), new THREE.LineDashedMaterial({ color: art.color, transparent: true, opacity: .44, dashSize: .09, gapSize: .06 }));
+    responsibility.computeLineDistances();
+    group.add(responsibility);
+    const seat = mesh(new THREE.CylinderGeometry(.24, .28, .09, 16), art.accent, .42, .68);
+    seat.position.copy(anchors[index]).multiplyScalar(.64).setY(layer.y + .12);
+    group.add(seat);
     registerFacet(ctx, layer, facet, [column, capital, beam], anchors[index].clone().setY(layer.y + .98));
   });
 
@@ -217,6 +224,19 @@ function buildTextura(ctx: BuildContext, layer: TowerLayer): THREE.Mesh[] {
   const anchors = polygonPoints(2.55, layer.y + .17, 5, -Math.PI / 2 + .12);
   const canopy = polygonPoints(2.76, layer.y + 1.06, 10, -Math.PI / 2 + .12);
   group.add(lineLoop(canopy, art.accent, .58));
+
+  for (let index = -4; index <= 4; index++) {
+    const offset = index * .48;
+    const warp = Array.from({ length: 9 }, (_, pointIndex) => {
+      const z = -2.2 + pointIndex * .55;
+      return new THREE.Vector3(offset, layer.y + .09 + (pointIndex % 2) * .025, z);
+    });
+    const weft = Array.from({ length: 9 }, (_, pointIndex) => {
+      const x = -2.2 + pointIndex * .55;
+      return new THREE.Vector3(x, layer.y + .105 + ((pointIndex + index) % 2) * .025, offset);
+    });
+    group.add(tube(warp, art.color, .009, .2), tube(weft, art.accent, .009, .18));
+  }
 
   layer.facets.forEach((facet, index) => {
     const start = anchors[index];
@@ -261,6 +281,9 @@ function buildForum(ctx: BuildContext, layer: TowerLayer): THREE.Mesh[] {
   const step = mesh(new THREE.BoxGeometry(6.75, .08, 2.65), art.accent, .13);
   step.position.y = layer.y + .09;
   group.add(step);
+  const upperStep = mesh(new THREE.BoxGeometry(6.15, .07, 2.28), art.color, .12);
+  upperStep.position.y = layer.y + .17;
+  group.add(upperStep);
   const xPositions = [-2.5, -1.25, 0, 1.25, 2.5];
 
   layer.facets.forEach((facet, index) => {
@@ -281,10 +304,18 @@ function buildForum(ctx: BuildContext, layer: TowerLayer): THREE.Mesh[] {
   const entablature = mesh(new THREE.BoxGeometry(7.05, .13, .3), art.accent, .42, .42);
   entablature.position.set(0, layer.y + 1.18, 0);
   group.add(entablature);
+  const pediment = tube([
+    new THREE.Vector3(-3.18, layer.y + 1.26, 0),
+    new THREE.Vector3(0, layer.y + 1.58, 0),
+    new THREE.Vector3(3.18, layer.y + 1.26, 0),
+  ], art.accent, .035, .62);
+  const seal = new THREE.Mesh(new THREE.TorusGeometry(.18, .025, 8, 32), new THREE.MeshBasicMaterial({ color: art.color, transparent: true, opacity: .72 }));
+  seal.position.set(0, layer.y + 1.39, .02);
+  group.add(pediment, seal);
   const title = layerTitle(layer);
   title.position.set(-2.62, layer.y + .34, 1.8);
   group.add(title);
-  return [lower, step, entablature];
+  return [lower, step, upperStep, entablature];
 }
 
 function buildOrbis(ctx: BuildContext, layer: TowerLayer): THREE.Mesh[] {
@@ -319,6 +350,12 @@ function buildOrbis(ctx: BuildContext, layer: TowerLayer): THREE.Mesh[] {
   group.add(equator);
   const axis = tube([new THREE.Vector3(0, layer.y - .05, 0), new THREE.Vector3(0, layer.y + .66, 0), new THREE.Vector3(0, layer.y + 1.38, 0)], art.accent, .025, .68);
   group.add(axis);
+  const north = mesh(new THREE.SphereGeometry(.11, 16, 10), art.accent, .84, .36);
+  north.position.set(0, layer.y + 2.12, 0);
+  const south = north.clone();
+  south.material = (north.material as THREE.Material).clone();
+  south.position.set(0, layer.y - .22, 0);
+  group.add(north, south);
   const title = layerTitle(layer);
   title.position.set(-2.5, layer.y + .25, 2.65);
   group.add(title);
@@ -382,9 +419,7 @@ export function applyWorldSelection(architecture: WorldArchitecture, selectedLay
     const inLayer = visual.layerID === selectedLayerID;
     const active = facetID === selectedFacetID;
     visual.label.visible = inLayer;
-    const labelMaterial = visual.label.material as THREE.SpriteMaterial;
-    labelMaterial.opacity = active ? 1 : .72;
-    visual.label.scale.set(active ? 1.58 : 1.3, active ? .356 : .293, 1);
+    visual.label.element.classList.toggle("is-active", active);
     for (const object of visual.meshes) {
       const objectMaterial = object.material as THREE.MeshPhysicalMaterial;
       objectMaterial.opacity = Math.min(.98, object.userData.baseOpacity + (active ? .3 : inLayer ? .08 : 0));
