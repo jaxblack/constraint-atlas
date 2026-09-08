@@ -18,6 +18,11 @@ describe("analysisSchema", () => {
     });
 
     expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.layers.map((layer) => layer.label)).toEqual(["个人五层需求", "组织与团体", "社会规范", "国家制度", "全球经济"]);
+      expect(result.data.layers.every((layer) => layer.facets.length === 5)).toBe(true);
+      expect(result.data.nodes.every((node) => node.facet.includes("."))).toBe(true);
+    }
   });
 
   it("accepts mixed node kinds across explicit causal layers", () => {
@@ -71,7 +76,29 @@ describe("analysisSchema", () => {
     });
 
     expect(result.nodes.reduce((sum, node) => sum + node.contribution, 0)).toBe(100);
+    expect(result.layers).toHaveLength(5);
+    expect(result.nodes.find((node) => node.id === "money")?.facet).toBe("organization.resource");
     expect(result.nodes.find((node) => node.id === "route")?.contribution).toBe(0);
     expect(result.nodes.find((node) => node.id === "ask")?.contribution).toBe(0);
+  });
+
+  it("accepts compact model output without repeating the fixed world catalog", () => {
+    const result = analysisSchema.parse({
+      title: "组织资源取舍",
+      conclusion: "先验证组织资源约束。",
+      nodes: [
+        { id: "need", kind: "need", layer: 1, facet: "personal.growth", contribution: 25, label: "成长需要", detail: "需要创造空间。" },
+        { id: "people", kind: "constraint", layer: 2, facet: "organization.resource", contribution: 75, label: "人力不足", detail: "只有两名工程师。" },
+        { id: "probe", kind: "action", layer: 2, facet: "organization.governance", label: "一周实验", detail: "只验证一条产品线。" },
+      ],
+      edges: [
+        { source: "need", target: "people", relation: "受限于" },
+        { source: "people", target: "probe", relation: "需要验证" },
+      ],
+    });
+
+    expect(result.layers).toHaveLength(5);
+    expect(result.nodes.find((node) => node.id === "people")?.layer).toBe(2);
+    expect(result.nodes.find((node) => node.id === "people")?.facet).toBe("organization.resource");
   });
 });

@@ -4,13 +4,69 @@ export const nodeKinds = ["need", "fact", "constraint", "choice", "action"] as c
 export const disableStates = ["hard", "capability", "resource", "permission", "coordination", "temporary", "none"] as const;
 export const interventions = ["accept", "train", "acquire", "negotiate", "reroute", "wait", "exit", "experiment"] as const;
 export const scaleIDs = ["micro", "meso", "macro"] as const;
+export const worldDomains = ["personal", "organization", "norm", "state", "global"] as const;
 
 const layerSchema = z.object({
   id: z.number().int().min(1).max(6),
-  domain: z.enum(["physical", "capability", "resource", "institution", "social", "custom"]).optional(),
+  domain: z.enum([...worldDomains, "physical", "capability", "resource", "institution", "social", "custom"]).optional(),
   label: z.string().min(1).max(40),
   description: z.string().min(1).max(160),
 });
+
+const facetSchema = z.object({
+  id: z.string().min(1).max(40),
+  label: z.string().min(1).max(40),
+  description: z.string().min(1).max(120),
+});
+
+const fixedLayerSchema = z.object({
+  id: z.number().int().min(1).max(5),
+  domain: z.enum(worldDomains),
+  label: z.string().min(1).max(40),
+  description: z.string().min(1).max(160),
+  facets: z.array(facetSchema).length(5),
+});
+
+export type AnalysisFacet = z.infer<typeof facetSchema>;
+export type AnalysisLayer = z.infer<typeof fixedLayerSchema>;
+
+export const fixedWorldLayers: AnalysisLayer[] = fixedLayerSchema.array().parse([
+  { id: 1, domain: "personal", label: "个人五层需求", description: "从生存到创造，目标首先要通过人的身体、心理与身份系统", facets: [
+    { id: "personal.survival", label: "生存", description: "健康、睡眠、体力与基本生活" },
+    { id: "personal.safety", label: "安全", description: "稳定、可控、边界与风险承受" },
+    { id: "personal.belonging", label: "归属", description: "亲密关系、群体接纳与连接" },
+    { id: "personal.esteem", label: "尊严", description: "认可、地位、自我效能与自主" },
+    { id: "personal.growth", label: "成长", description: "意义、创造、学习与自我实现" },
+  ] },
+  { id: 2, domain: "organization", label: "组织与团体", description: "家庭、团队与公司通过角色、资源和协作机制放大或限制个人", facets: [
+    { id: "organization.role", label: "角色权责", description: "谁负责、谁批准、谁承担后果" },
+    { id: "organization.incentive", label: "激励利益", description: "收益、成本、绩效与内部博弈" },
+    { id: "organization.resource", label: "组织资源", description: "预算、人力、时间、关系与工具" },
+    { id: "organization.coordination", label: "协作流程", description: "沟通、依赖、节奏与集体行动" },
+    { id: "organization.governance", label: "治理规则", description: "决策机制、流程、权限与问责" },
+  ] },
+  { id: 3, domain: "norm", label: "社会规范", description: "文化、声誉与公共叙事决定什么被认为正常、体面或可接受", facets: [
+    { id: "norm.custom", label: "习俗伦理", description: "默认做法、道德边界与代际期待" },
+    { id: "norm.reputation", label: "声誉评价", description: "名望、羞耻、标签与社会奖惩" },
+    { id: "norm.legitimacy", label: "正当性", description: "行动是否被群体承认与允许" },
+    { id: "norm.network", label: "关系网络", description: "圈层、信任、传播与非正式权力" },
+    { id: "norm.narrative", label: "公共叙事", description: "媒体话语、身份故事与集体想象" },
+  ] },
+  { id: 4, domain: "state", label: "国家制度", description: "法律、行政与公共资源定义正式权利、义务和可执行边界", facets: [
+    { id: "state.law", label: "法律权利", description: "法律许可、义务、合同与产权" },
+    { id: "state.citizenship", label: "身份资格", description: "国籍、户籍、签证、牌照与福利资格" },
+    { id: "state.administration", label: "行政监管", description: "审批、合规、行业规则与官僚流程" },
+    { id: "state.fiscal", label: "财政公共品", description: "税收、补贴、教育、医疗与基础设施" },
+    { id: "state.enforcement", label: "执行能力", description: "司法、执法、申诉与制度可信度" },
+  ] },
+  { id: 5, domain: "global", label: "全球经济", description: "跨国资本、贸易、技术和地缘关系塑造本地系统的外部上限", facets: [
+    { id: "global.capital", label: "资本金融", description: "利率、融资、汇率与风险定价" },
+    { id: "global.trade", label: "贸易市场", description: "跨境需求、价格、关税与市场准入" },
+    { id: "global.supply", label: "供应链", description: "能源、原料、物流与生产网络" },
+    { id: "global.technology", label: "技术平台", description: "技术范式、平台规则、算力与知识扩散" },
+    { id: "global.geopolitics", label: "地缘与生态", description: "国际关系、安全冲突、气候与系统风险" },
+  ] },
+]);
 
 const disablementSchema = z.object({
   target: z.string().min(1).max(160),
@@ -43,6 +99,7 @@ const rawAnalysisSchema = z.object({
     id: z.string().min(1).max(40),
     kind: z.enum(nodeKinds),
     layer: z.number().int().min(1).max(6).optional(),
+    facet: z.string().min(1).max(40).optional(),
     contribution: z.number().min(0).max(100).optional(),
     confidence: z.number().min(0).max(100).optional(),
     disableState: z.enum(disableStates).optional(),
@@ -60,11 +117,11 @@ const rawAnalysisSchema = z.object({
 type RawAnalysis = z.infer<typeof rawAnalysisSchema>;
 type NodeKind = typeof nodeKinds[number];
 
-export type AnalysisLayer = z.infer<typeof layerSchema>;
 export type Analysis = Omit<RawAnalysis, "layers" | "nodes"> & {
   layers: AnalysisLayer[];
-  nodes: Array<Omit<RawAnalysis["nodes"][number], "layer" | "contribution" | "confidence" | "disableState" | "intervention"> & {
+  nodes: Array<Omit<RawAnalysis["nodes"][number], "layer" | "facet" | "contribution" | "confidence" | "disableState" | "intervention"> & {
     layer: number;
+    facet: string;
     contribution: number;
     confidence: number;
     disableState: typeof disableStates[number];
@@ -73,7 +130,7 @@ export type Analysis = Omit<RawAnalysis, "layers" | "nodes"> & {
 };
 
 type LayeredAnalysis = Omit<RawAnalysis, "layers" | "nodes"> & {
-  layers: AnalysisLayer[];
+  layers: Array<z.infer<typeof layerSchema>>;
   nodes: Array<Omit<RawAnalysis["nodes"][number], "layer"> & { layer: number }>;
 };
 
@@ -149,11 +206,11 @@ function normalizedContributions(nodes: LayeredAnalysis["nodes"]): number[] {
 function defaultDisableState(layer: AnalysisLayer | undefined, kind: NodeKind): typeof disableStates[number] {
   if (kind === "choice" || kind === "action") return "none";
   switch (layer?.domain) {
-    case "physical": return "hard";
-    case "capability": return "capability";
-    case "resource": return "resource";
-    case "institution": return "permission";
-    case "social": return "coordination";
+    case "personal": return kind === "need" ? "temporary" : "capability";
+    case "organization": return "resource";
+    case "norm": return "coordination";
+    case "state": return "permission";
+    case "global": return "resource";
     default: return kind === "constraint" ? "temporary" : "none";
   }
 }
@@ -173,22 +230,41 @@ function defaultIntervention(kind: NodeKind, state: typeof disableStates[number]
 }
 
 export function normalizeAnalysis(analysis: RawAnalysis): Analysis {
+  const hasFixedCoordinates = !analysis.layers && analysis.nodes.every((node) => node.layer !== undefined && node.layer >= 1 && node.layer <= 5);
   const layerIDs = new Set(analysis.layers?.map((layer) => layer.id) ?? []);
   const hasExplicitLayers = layerIDs.size >= 2 && analysis.nodes.every((node) => node.layer !== undefined && layerIDs.has(node.layer));
-  const layered: LayeredAnalysis = !hasExplicitLayers ? deriveLayers(analysis) : {
+  const layered: LayeredAnalysis = hasFixedCoordinates ? {
+    ...analysis,
+    layers: fixedWorldLayers,
+    nodes: analysis.nodes.map((node) => ({ ...node, layer: node.layer! })),
+  } : !hasExplicitLayers ? deriveLayers(analysis) : {
     ...analysis,
     layers: [...analysis.layers!].sort((left, right) => left.id - right.id),
     nodes: analysis.nodes.map((node) => ({ ...node, layer: node.layer! })),
   };
-  const contributions = normalizedContributions(layered.nodes);
-  const layers = new Map(layered.layers.map((layer) => [layer.id, layer]));
+  const legacyDomainMap: Record<string, number> = { physical: 1, capability: 1, resource: 2, social: 3, institution: 4, custom: 5 };
+  const suppliedLayerIndex = new Map(layered.layers.map((layer, index) => [layer.id, index]));
+  const worldDomainID = new Map(fixedWorldLayers.map((layer) => [layer.domain, layer.id]));
+  const remappedNodes = layered.nodes.map((node) => {
+    const suppliedLayer = layered.layers.find((layer) => layer.id === node.layer);
+    const mappedDomain = suppliedLayer?.domain ? worldDomainID.get(suppliedLayer.domain as typeof worldDomains[number]) ?? legacyDomainMap[suppliedLayer.domain] : undefined;
+    const index = suppliedLayerIndex.get(node.layer) ?? 0;
+    const spreadLayer = layered.layers.length <= 1 ? 1 : Math.round(index * 4 / (layered.layers.length - 1)) + 1;
+    return { ...node, layer: mappedDomain ?? inferWorldLayer(node.label, node.detail, spreadLayer) };
+  });
+  const contributions = normalizedContributions(remappedNodes);
+  const layers = new Map(fixedWorldLayers.map((layer) => [layer.id, layer]));
   return {
     ...layered,
-    nodes: layered.nodes.map((node, index) => {
+    layers: fixedWorldLayers.map((layer) => ({ ...layer, facets: layer.facets.map((facet) => ({ ...facet })) })),
+    nodes: remappedNodes.map((node, index) => {
       const contribution = contributions[index];
-      const disableState = contribution > 0 ? (node.disableState ?? defaultDisableState(layers.get(node.layer), node.kind)) : "none";
+      const layer = layers.get(node.layer)!;
+      const disableState = contribution > 0 ? (node.disableState ?? defaultDisableState(layer, node.kind)) : "none";
+      const facet = layer.facets.some((item) => item.id === node.facet) ? node.facet! : inferFacet(layer, node.label, node.detail);
       return {
         ...node,
+        facet,
         contribution,
         confidence: Math.round(node.confidence ?? (contribution > 0 ? 65 : 80)),
         disableState,
@@ -196,6 +272,55 @@ export function normalizeAnalysis(analysis: RawAnalysis): Analysis {
       };
     }),
   };
+}
+
+function inferWorldLayer(label: string, detail: string, fallback: number): number {
+  const text = `${label} ${detail}`.toLowerCase();
+  const layerKeywords: Array<[number, string[]]> = [
+    [5, ["全球", "国际", "跨境", "汇率", "关税", "供应链", "地缘", "气候", "平台"]],
+    [4, ["国家", "法律", "政策", "行政", "监管", "审批", "签证", "户籍", "税收", "司法"]],
+    [3, ["社会", "文化", "习俗", "舆论", "声誉", "体面", "正当", "代际", "圈层"]],
+    [2, ["组织", "团队", "公司", "预算", "人力", "流程", "绩效", "协作", "共识", "权限"]],
+    [1, ["个人", "健康", "安全", "关系", "归属", "尊严", "自主", "成长", "意义", "现金流"]],
+  ];
+  return layerKeywords.find(([, keywords]) => keywords.some((keyword) => text.includes(keyword)))?.[0] ?? fallback;
+}
+
+function inferFacet(layer: AnalysisLayer, label: string, detail: string): string {
+  const text = `${label} ${detail}`.toLowerCase();
+  const keywords: Record<string, string[]> = {
+    "personal.survival": ["健康", "睡眠", "体力", "生存", "疾病"],
+    "personal.safety": ["安全", "稳定", "风险", "现金流", "焦虑"],
+    "personal.belonging": ["关系", "归属", "亲密", "孤独", "家庭"],
+    "personal.esteem": ["认可", "尊严", "地位", "自主", "自信"],
+    "personal.growth": ["成长", "意义", "创造", "学习", "实现"],
+    "organization.role": ["角色", "职责", "负责", "批准", "老板"],
+    "organization.incentive": ["激励", "利益", "绩效", "回报", "成本"],
+    "organization.resource": ["预算", "人力", "资源", "时间", "工具"],
+    "organization.coordination": ["协作", "沟通", "依赖", "团队", "共识"],
+    "organization.governance": ["流程", "治理", "决策", "问责", "权限"],
+    "norm.custom": ["习俗", "伦理", "传统", "代际", "道德"],
+    "norm.reputation": ["声誉", "评价", "体面", "标签", "羞耻"],
+    "norm.legitimacy": ["正当", "允许", "认同", "合法性", "接受"],
+    "norm.network": ["圈层", "人脉", "信任", "网络", "传播"],
+    "norm.narrative": ["叙事", "舆论", "媒体", "身份故事", "话语"],
+    "state.law": ["法律", "合同", "产权", "权利", "义务"],
+    "state.citizenship": ["国籍", "户籍", "签证", "牌照", "资格"],
+    "state.administration": ["审批", "监管", "合规", "行政", "政策"],
+    "state.fiscal": ["税", "补贴", "教育", "医疗", "基础设施"],
+    "state.enforcement": ["司法", "执法", "申诉", "执行", "仲裁"],
+    "global.capital": ["资本", "融资", "利率", "汇率", "金融"],
+    "global.trade": ["贸易", "关税", "跨境", "市场准入", "出口"],
+    "global.supply": ["供应链", "物流", "能源", "原料", "制造"],
+    "global.technology": ["技术", "平台", "算力", "ai", "知识"],
+    "global.geopolitics": ["地缘", "国际", "气候", "战争", "制裁"],
+  };
+  const match = layer.facets.find((facet) => keywords[facet.id]?.some((keyword) => text.includes(keyword)));
+  return match?.id ?? layer.facets[Math.min(2, layer.facets.length - 1)].id;
+}
+
+export function facetLabel(facetID: string): string {
+  return fixedWorldLayers.flatMap((layer) => layer.facets).find((facet) => facet.id === facetID)?.label ?? facetID;
 }
 
 export const analysisSchema = rawAnalysisSchema.transform(normalizeAnalysis).superRefine((analysis, ctx) => {
@@ -230,36 +355,30 @@ export function buildFallback(question: string): Analysis {
   const subject = question.replace(/[？?。.!！]+$/u, "").slice(0, 34);
   return {
     title: subject || "当前困局",
-    conclusion: "先别把所有做不到都翻译成“还不够努力”。分别检查物理边界、能力、资源、制度权限和他人协作，再决定是升级、获取资源、谈判、绕路还是退出。",
-    disablement: { target: subject || "改变当前困局", status: "mixed", topBlocker: "资源与制度边界尚未被准确核实" },
+    conclusion: "先别把所有做不到都翻译成“还不够努力”。把问题放进个人需求、组织机制、社会规范、国家制度和全球经济五层坐标，先验证最高权重的具体机制，再决定努力、谈判、绕路、等待还是换系统。",
+    disablement: { target: subject || "改变当前困局", status: "mixed", topBlocker: "组织资源与外部制度边界尚未被准确核实" },
     scales: [
       { id: "micro", diagnosis: "眼前事实和假设仍混在一起，暂时无法判断哪个按钮真的被禁用。", prediction: "若先核实一个关键事实，可选行动会明显收敛。", nextStep: "48 小时内验证一个最关键、最便宜的事实。" },
       { id: "meso", diagnosis: "需要判断这是一场偶发事件，还是在不同情境中反复出现的模式。", prediction: "若机制真实，相似条件下会重复出现相似阻塞。", nextStep: "回看最近三次相似经历，记录共同条件。" },
       { id: "macro", diagnosis: "宏观结构可能解释部分限制，但解释力不等于因果成立。", prediction: "有预测力的结构模型应能指出换身份、规则或环境后结果如何变化。", nextStep: "写下一个能推翻当前宏观解释的反例。" },
     ],
     theoryAudit: { function: "navigation", predictivePower: 45, explanation: "当前模型提供了调查方向，但证据不足，暂时只能作为导航假设。", falsifier: "若改变最高归因条件后结果没有改善，就应降低该解释的权重。" },
-    layers: [
-      { id: 1, domain: "physical", label: "物理与时间", description: "生命、时间和客观世界给出的硬边界" },
-      { id: 2, domain: "capability", label: "能力与信息", description: "当前知识、技能、体力和信息差" },
-      { id: 3, domain: "resource", label: "资源与工具", description: "金钱、时间、关系、算力和生产资料" },
-      { id: 4, domain: "institution", label: "制度与权限", description: "法律、身份、组织规则和账号权限" },
-      { id: 5, domain: "social", label: "社会协作", description: "他人意愿、博弈、信任和集体行动" },
-    ],
+    layers: fixedWorldLayers,
     nodes: [
-      { id: "physical", kind: "fact", layer: 1, contribution: 10, confidence: 55, disableState: "hard", intervention: "accept", label: "客观边界待核实", detail: "先确认是否存在真正不可逆的时间、健康或物理限制。" },
-      { id: "capability", kind: "fact", layer: 2, contribution: 20, confidence: 55, disableState: "capability", intervention: "train", label: "能力差距待测量", detail: "把“我不行”改写成可以测试的知识或技能缺口。" },
-      { id: "resource", kind: "constraint", layer: 3, contribution: 30, confidence: 65, disableState: "resource", intervention: "acquire", label: "资源不足", detail: "检查金钱、时间、关系和工具中哪个资源最先耗尽。" },
-      { id: "institution", kind: "constraint", layer: 4, contribution: 20, confidence: 55, disableState: "permission", intervention: "reroute", label: "规则与权限", detail: "确认按钮是困难，还是当前身份在系统里真的没有权限。" },
-      { id: "social", kind: "need", layer: 5, contribution: 20, confidence: 50, disableState: "coordination", intervention: "negotiate", label: "需要他人合作", detail: "很多目标不是个人努力问题，而是别人是否愿意共同完成。" },
-      { id: "route", kind: "choice", layer: 4, contribution: 0, confidence: 70, disableState: "none", intervention: "reroute", label: "换账号或换系统", detail: "权限拿不到时，比较绕过接口、改变身份或重设目标。" },
-      { id: "probe", kind: "action", layer: 5, contribution: 0, confidence: 80, disableState: "none", intervention: "experiment", label: "48 小时归因实验", detail: "验证最高权重条件；结果不变就降低它的归因份额。" },
+      { id: "personal", kind: "need", layer: 1, facet: "personal.safety", contribution: 18, confidence: 58, disableState: "temporary", intervention: "experiment", label: "个人安全边界", detail: "先确认健康、稳定、现金流与风险承受中哪个需求不可牺牲。" },
+      { id: "organization", kind: "constraint", layer: 2, facet: "organization.resource", contribution: 28, confidence: 65, disableState: "resource", intervention: "acquire", label: "组织资源不足", detail: "检查预算、人力、时间和工具中哪个资源最先耗尽。" },
+      { id: "norm", kind: "constraint", layer: 3, facet: "norm.legitimacy", contribution: 14, confidence: 48, disableState: "coordination", intervention: "negotiate", label: "正当性与期待", detail: "判断阻力来自真实利益，还是群体对什么才算合理的默认期待。" },
+      { id: "state", kind: "constraint", layer: 4, facet: "state.administration", contribution: 18, confidence: 52, disableState: "permission", intervention: "reroute", label: "正式规则与资格", detail: "确认是否存在审批、合规、身份或法律上的真实禁用。" },
+      { id: "global", kind: "fact", layer: 5, facet: "global.capital", contribution: 22, confidence: 46, disableState: "resource", intervention: "wait", label: "外部市场条件", detail: "利率、资本、平台和跨境市场可能改变本地选择的成本上限。" },
+      { id: "route", kind: "choice", layer: 4, facet: "state.administration", contribution: 0, confidence: 70, disableState: "none", intervention: "reroute", label: "换身份或换系统", detail: "权限拿不到时，比较绕过接口、改变组织位置或重设目标。" },
+      { id: "probe", kind: "action", layer: 2, facet: "organization.governance", contribution: 0, confidence: 80, disableState: "none", intervention: "experiment", label: "48 小时归因实验", detail: "验证最高权重机制；结果不变就降低它的归因份额。" },
     ],
     edges: [
-      { source: "physical", target: "capability", relation: "限定上限" },
-      { source: "capability", target: "resource", relation: "影响效率" },
-      { source: "resource", target: "institution", relation: "影响权限" },
-      { source: "institution", target: "route", relation: "迫使绕路" },
-      { source: "institution", target: "social", relation: "塑造博弈" },
+      { source: "personal", target: "organization", relation: "进入集体" },
+      { source: "organization", target: "norm", relation: "形成惯例" },
+      { source: "norm", target: "state", relation: "获得正式化" },
+      { source: "state", target: "global", relation: "连接外部" },
+      { source: "state", target: "route", relation: "迫使绕路" },
       { source: "route", target: "probe", relation: "需要验证" },
     ],
   };

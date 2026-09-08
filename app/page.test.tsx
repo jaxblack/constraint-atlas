@@ -26,14 +26,16 @@ describe("Home", () => {
             ],
             theoryAudit: { function: "navigation", predictivePower: 72, explanation: "它能推出可验证的求职策略。", falsifier: "若外部岗位验证仍无改善，则模型不足。" },
             layers: [
-              { id: 1, label: "底层诉求", description: "真正需要保护的东西" },
-              { id: 2, label: "现实边界", description: "短期不可忽略的限制" },
-              { id: 3, label: "行动空间", description: "可逆的下一步" },
+              { id: 1, domain: "personal", label: "个人五层需求", description: "个人需要" },
+              { id: 2, domain: "organization", label: "组织与团体", description: "组织机制" },
+              { id: 3, domain: "norm", label: "社会规范", description: "社会期待" },
+              { id: 4, domain: "state", label: "国家制度", description: "正式制度" },
+              { id: 5, domain: "global", label: "全球经济", description: "外部系统" },
             ],
             nodes: [
-              { id: "need", kind: "need", layer: 1, contribution: 30, confidence: 80, disableState: "temporary", intervention: "experiment", label: "需要更多自主感", detail: "这是核心需求。" },
-              { id: "constraint", kind: "constraint", layer: 2, contribution: 70, confidence: 95, disableState: "resource", intervention: "acquire", label: "现金流只能支撑三个月", detail: "这是硬约束。" },
-              { id: "action", kind: "action", layer: 3, contribution: 0, confidence: 90, disableState: "none", intervention: "experiment", label: "周末完成一次真实项目", detail: "这是下一步。" },
+              { id: "need", kind: "need", layer: 1, facet: "personal.growth", contribution: 30, confidence: 80, disableState: "temporary", intervention: "experiment", label: "需要更多自主感", detail: "这是核心需求。" },
+              { id: "constraint", kind: "constraint", layer: 2, facet: "organization.resource", contribution: 70, confidence: 95, disableState: "resource", intervention: "acquire", label: "现金流只能支撑三个月", detail: "这是硬约束。" },
+              { id: "action", kind: "action", layer: 2, facet: "organization.governance", contribution: 0, confidence: 90, disableState: "none", intervention: "experiment", label: "周末完成一次真实项目", detail: "这是下一步。" },
             ],
             edges: [
               { source: "need", target: "constraint", relation: "受限于" },
@@ -53,9 +55,9 @@ describe("Home", () => {
     fireEvent.click(screen.getByRole("button", { name: "开始拆解" }));
 
     expect(await screen.findByText("先用低成本实验验证新方向，而不是立刻辞职。")).toBeInTheDocument();
-    expect(screen.getAllByText("01 · 底层诉求")).toHaveLength(3);
-    expect(screen.getAllByText("02 · 现实边界")).toHaveLength(3);
-    expect(screen.getAllByText("03 · 行动空间")).toHaveLength(3);
+    expect(screen.getAllByText("01 · 个人五层需求")).toHaveLength(3);
+    expect(screen.getAllByText("02 · 组织与团体")).toHaveLength(3);
+    expect(screen.getAllByText("05 · 全球经济")).toHaveLength(3);
     expect(screen.getAllByText("现金流只能支撑三个月")).toHaveLength(2);
     expect(screen.getByText("周末完成一次真实项目")).toBeInTheDocument();
     expect(screen.getByText("受限于")).toBeInTheDocument();
@@ -67,7 +69,10 @@ describe("Home", () => {
     expect(screen.getByRole("tab", { name: "中观模式" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "宏观模式" })).toBeInTheDocument();
     expect(screen.getByText("导航模型")).toBeInTheDocument();
-    expect(screen.getByLabelText("3D Disable 归因塔")).toBeInTheDocument();
+    expect(screen.getByLabelText("3D 世界层级归因塔")).toBeInTheDocument();
+    expect(screen.getByText("3D 世界约束塔")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "组织资源70%" })).toBeInTheDocument();
+    expect(screen.getByText("问题定位")).toBeInTheDocument();
     const detailsSummary = screen.getByText("展开完整归因与二维因果图");
     const details = detailsSummary.closest("details");
     expect(details).not.toHaveAttribute("open");

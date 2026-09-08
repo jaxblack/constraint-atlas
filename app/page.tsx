@@ -4,7 +4,7 @@ import { useEffect, useState, type CSSProperties } from "react";
 import { Background, Controls, Edge, Node, ReactFlow, type ReactFlowInstance } from "@xyflow/react";
 import { ArrowDown, ArrowRight, ChevronDown, Clock3, Compass, FlaskConical, History, Layers3, Map as MapIcon, Play, Sparkles, Trash2 } from "lucide-react";
 import "@xyflow/react/dist/style.css";
-import { analysisSchema, type Analysis } from "./analysis";
+import { analysisSchema, facetLabel, type Analysis } from "./analysis";
 import DisableTower3D from "./DisableTower3D";
 import InsightPanels from "./InsightPanels";
 
@@ -88,7 +88,7 @@ function flowElements(input: Analysis): { nodes: Node[]; edges: Edge[]; canvasHe
     data: { label: <div className={`map-node map-node--${item.kind}`}>
       <span><i />{kindLabels[item.kind]}<b className={item.contribution > 0 ? "has-contribution" : ""}>{item.contribution > 0 ? `${item.contribution}%` : "响应"}</b></span>
       <strong>{item.label}</strong><p>{item.detail}</p>
-      <div className="map-node-meta"><em>{disableStateLabels[item.disableState]}</em><em>{interventionLabels[item.intervention]}</em><small>可信 {item.confidence}%</small></div>
+      <div className="map-node-meta"><em>{facetLabel(item.facet)}</em><em>{disableStateLabels[item.disableState]}</em><em>{interventionLabels[item.intervention]}</em><small>可信 {item.confidence}%</small></div>
     </div> },
     style: { width: nodeWidth, border: 0, padding: 0, background: "transparent" },
     zIndex: 3,
