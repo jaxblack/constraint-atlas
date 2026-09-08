@@ -35,6 +35,16 @@ function identify(object: THREE.Object3D, layerID: number, facetID?: string): vo
   if (facetID) object.userData.facetID = facetID;
 }
 
+function hitMesh(geometry: THREE.BufferGeometry): THREE.Mesh {
+  return new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false, colorWrite: false, side: THREE.DoubleSide }));
+}
+
+function addHitTarget(ctx: BuildContext, parent: THREE.Object3D, target: THREE.Mesh, layerID: number, facetID: string): void {
+  identify(target, layerID, facetID);
+  parent.add(target);
+  ctx.clickable.push(target);
+}
+
 function outline(parent: THREE.Object3D, object: THREE.Mesh, color: number, opacity = .72): void {
   const edges = new THREE.LineSegments(new THREE.EdgesGeometry(object.geometry, 18), new THREE.LineBasicMaterial({ color, transparent: true, opacity }));
   edges.position.copy(object.position);
@@ -126,6 +136,10 @@ function buildCorpus(ctx: BuildContext, layer: TowerLayer): THREE.Mesh[] {
     ring.rotation.x = -Math.PI / 2;
     ring.position.y = layer.y + .07 + index * .004;
     group.add(ring);
+    const hit = hitMesh(new THREE.RingGeometry(radii[index] - .18, radii[index] + .18, 72));
+    hit.rotation.copy(ring.rotation);
+    hit.position.copy(ring.position).add(new THREE.Vector3(0, .025, 0));
+    addHitTarget(ctx, group, hit, layer.id, facet.id);
     const angle = -.88 + index * .42;
     const anchor = new THREE.Vector3(Math.cos(angle) * radii[index], layer.y + .12, Math.sin(angle) * radii[index]);
     registerFacet(ctx, layer, facet, [ring], anchor);
@@ -173,6 +187,9 @@ function buildOfficina(ctx: BuildContext, layer: TowerLayer): THREE.Mesh[] {
     const capital = mesh(new THREE.CylinderGeometry(.25, .19, .09, 18), art.accent, facet.share > 0 ? .86 : .5, .42);
     capital.position.copy(anchors[index]).add(new THREE.Vector3(0, .92, 0));
     group.add(column, capital);
+    const hit = hitMesh(new THREE.CylinderGeometry(.34, .4, 1.08, 16));
+    hit.position.copy(anchors[index]).add(new THREE.Vector3(0, .56, 0));
+    addHitTarget(ctx, group, hit, layer.id, facet.id);
     const beam = tube([anchors[index].clone().setY(layer.y + .96), roof[index].clone(), new THREE.Vector3(0, layer.y + 1.14, 0)], art.accent, .025, .55);
     group.add(beam);
     registerFacet(ctx, layer, facet, [column, capital, beam], anchors[index].clone().setY(layer.y + .98));
@@ -210,6 +227,9 @@ function buildTextura(ctx: BuildContext, layer: TowerLayer): THREE.Mesh[] {
     knot.position.copy(start);
     knot.rotation.x = Math.PI / 2;
     group.add(knot);
+    const hit = hitMesh(new THREE.SphereGeometry(.38, 16, 10));
+    hit.position.copy(start).add(new THREE.Vector3(0, .12, 0));
+    addHitTarget(ctx, group, hit, layer.id, facet.id);
     const tension = tube([start, new THREE.Vector3(start.x * 1.04, layer.y + .68, start.z * 1.04), canopy[index * 2]], art.accent, .018, .4);
     group.add(tension);
     registerFacet(ctx, layer, facet, [ribbon, knot], start.clone().setY(layer.y + .42));
@@ -252,6 +272,9 @@ function buildForum(ctx: BuildContext, layer: TowerLayer): THREE.Mesh[] {
     right.position.set(xPositions[index] + .43, layer.y + .46, 0);
     const arch = tube(archCurve(xPositions[index], layer.y, 0), art.color, .055, facet.share > 0 ? .86 : .46);
     group.add(left, right, arch);
+    const hit = hitMesh(new THREE.PlaneGeometry(1.08, 1.22));
+    hit.position.set(xPositions[index], layer.y + .67, .03);
+    addHitTarget(ctx, group, hit, layer.id, facet.id);
     registerFacet(ctx, layer, facet, [left, right, arch], new THREE.Vector3(xPositions[index], layer.y + 1.17, 0));
   });
 
@@ -284,6 +307,10 @@ function buildOrbis(ctx: BuildContext, layer: TowerLayer): THREE.Mesh[] {
     orbit.position.copy(center);
     orbit.rotation.set(rotations[index][0], rotations[index][1], rotations[index][2]);
     group.add(orbit);
+    const hit = hitMesh(new THREE.TorusGeometry(2 + index * .08, .14, 10, 90));
+    hit.position.copy(center);
+    hit.rotation.copy(orbit.rotation);
+    addHitTarget(ctx, group, hit, layer.id, facet.id);
     const angle = -.7 + index * .35;
     const anchor = new THREE.Vector3(Math.cos(angle) * 2.18, center.y + Math.sin(index * 1.4) * .28, Math.sin(angle) * 2.18);
     registerFacet(ctx, layer, facet, [orbit], anchor);
