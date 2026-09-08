@@ -8,6 +8,7 @@ export type FacetVisual = {
   meshes: THREE.Mesh[];
   label: CSS2DObject;
   anchor: THREE.Vector3;
+  halo: THREE.Mesh;
 };
 
 export type LayerVisual = { meshes: THREE.Mesh[] };
@@ -17,6 +18,7 @@ export type WorldArchitecture = {
   facets: Map<string, FacetVisual>;
   layers: Map<number, LayerVisual>;
   targetPoints: THREE.Vector3[];
+  primaryFacetID: string;
 };
 
 type BuildContext = WorldArchitecture & { scene: THREE.Scene };
@@ -97,12 +99,21 @@ function registerFacet(ctx: BuildContext, layer: TowerLayer, facet: TowerFacet, 
   const label = facetLabel(layer, facet, anchor);
   label.visible = false;
   ctx.scene.add(label);
+  const halo = new THREE.Mesh(
+    new THREE.TorusGeometry(.25, .022, 8, 48),
+    new THREE.MeshBasicMaterial({ color: 0xc88a36, transparent: true, opacity: 0, depthTest: false }),
+  );
+  halo.position.copy(anchor).add(new THREE.Vector3(0, .05, 0));
+  halo.rotation.x = Math.PI / 2;
+  halo.visible = false;
+  halo.renderOrder = 18;
+  ctx.scene.add(halo);
   for (const object of meshes) {
     identify(object, layer.id, facet.id);
     ctx.clickable.push(object);
   }
   ctx.clickable.push(label);
-  ctx.facets.set(facet.id, { layerID: layer.id, meshes, label, anchor });
+  ctx.facets.set(facet.id, { layerID: layer.id, meshes, label, anchor, halo });
 }
 
 function buildCorpus(ctx: BuildContext, layer: TowerLayer): THREE.Mesh[] {
@@ -389,7 +400,8 @@ function addMeasurementPins(ctx: BuildContext, model: DisableTowerModel): void {
 }
 
 export function buildWorldArchitecture(scene: THREE.Scene, model: DisableTowerModel): WorldArchitecture {
-  const result: BuildContext = { scene, clickable: [], facets: new Map(), layers: new Map(), targetPoints: [] };
+  const primaryFacet = model.layers.flatMap((layer) => layer.facets).toSorted((left, right) => right.share - left.share)[0];
+  const result: BuildContext = { scene, clickable: [], facets: new Map(), layers: new Map(), targetPoints: [], primaryFacetID: primaryFacet?.id ?? "" };
   for (const layer of model.layers) {
     let meshes: THREE.Mesh[];
     switch (layer.domain) {
@@ -405,7 +417,7 @@ export function buildWorldArchitecture(scene: THREE.Scene, model: DisableTowerMo
   return result;
 }
 
-export function applyWorldSelection(architecture: WorldArchitecture, selectedLayerID: number | undefined, selectedFacetID: string | undefined): void {
+export function applyWorldSelection(architecture: WorldArchitecture, selectedLayerID: number | undefined, selectedFacetID: string | undefined, hoveredFacetID?: string): void {
   for (const [layerID, visual] of architecture.layers) {
     const active = layerID === selectedLayerID;
     for (const object of visual.meshes) {
@@ -418,15 +430,31 @@ export function applyWorldSelection(architecture: WorldArchitecture, selectedLay
   for (const [facetID, visual] of architecture.facets) {
     const inLayer = visual.layerID === selectedLayerID;
     const active = facetID === selectedFacetID;
-    visual.label.visible = inLayer;
+    const hovered = facetID === hoveredFacetID;
+    const primary = facetID === architecture.primaryFacetID;
+    visual.label.visible = inLayer || hovered;
     visual.label.element.classList.toggle("is-active", active);
+    visual.label.element.classList.toggle("is-hovered", hovered);
+    visual.halo.visible = active || hovered || primary;
+    visual.halo.userData.attention = primary && !active && !hovered;
+    visual.halo.scale.setScalar(hovered ? 1.34 : active ? 1.14 : 1);
+    const haloMaterial = visual.halo.material as THREE.MeshBasicMaterial;
+    haloMaterial.opacity = hovered ? .92 : active ? .72 : primary ? .28 : 0;
     for (const object of visual.meshes) {
       const objectMaterial = object.material as THREE.MeshPhysicalMaterial;
-      objectMaterial.opacity = Math.min(.98, object.userData.baseOpacity + (active ? .3 : inLayer ? .08 : 0));
-      objectMaterial.emissive.set(active ? 0xc88a36 : 0x000000);
-      objectMaterial.emissiveIntensity = active ? .28 : 0;
+      objectMaterial.opacity = Math.min(.98, object.userData.baseOpacity + (active ? .3 : hovered ? .22 : inLayer ? .08 : 0));
+      objectMaterial.emissive.set(active || hovered ? 0xc88a36 : 0x000000);
+      objectMaterial.emissiveIntensity = hovered ? .42 : active ? .28 : 0;
     }
   }
+}
+
+export function animateWorldAttention(architecture: WorldArchitecture, now: number): void {
+  const visual = architecture.facets.get(architecture.primaryFacetID);
+  if (!visual?.halo.visible || !visual.halo.userData.attention) return;
+  const phase = (Math.sin(now * .0032) + 1) / 2;
+  visual.halo.scale.setScalar(1 + phase * .24);
+  (visual.halo.material as THREE.MeshBasicMaterial).opacity = .18 + phase * .2;
 }
 
 export function disposeWorld(root: THREE.Object3D): void {

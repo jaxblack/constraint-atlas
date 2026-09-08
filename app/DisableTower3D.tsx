@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { BookOpen, Box, Crosshair, Layers3 } from "lucide-react";
+import { ArrowUpRight, BookOpen, Box, Crosshair, Layers3, MousePointer2 } from "lucide-react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { CSS2DRenderer } from "three/examples/jsm/renderers/CSS2DRenderer.js";
@@ -9,7 +9,7 @@ import type { Analysis } from "./analysis";
 import { buildDisableTower } from "./disableTowerModel";
 import WorldDossierDrawer from "./WorldDossierDrawer";
 import { worldArt } from "./worldArt";
-import { applyWorldSelection, buildWorldArchitecture, disposeWorld, type WorldArchitecture } from "./worldArchitecture3D";
+import { animateWorldAttention, applyWorldSelection, buildWorldArchitecture, disposeWorld, type WorldArchitecture } from "./worldArchitecture3D";
 
 const interventionLabels = { accept: "接受边界", train: "升级能力", acquire: "获取资源", negotiate: "协商合作", reroute: "绕路/换系统", wait: "等待窗口", exit: "退出游戏", experiment: "小步验证" } as const;
 
@@ -22,10 +22,13 @@ export default function DisableTower3D({ input }: { input: Analysis }) {
   const defaultFacet = model.layers.find((layer) => layer.id === defaultLayer)?.facets.toSorted((left, right) => right.share - left.share)[0]?.id;
   const [selectedID, setSelectedID] = useState<number | undefined>(defaultLayer);
   const [selectedFacetID, setSelectedFacetID] = useState<string | undefined>(defaultFacet);
+  const [hoveredFacetID, setHoveredFacetID] = useState<string>();
   const [dossierOpen, setDossierOpen] = useState(false);
   const [unsupported, setUnsupported] = useState(false);
   const selected = model.layers.find((layer) => layer.id === selectedID) ?? model.layers[0];
   const selectedFacet = selected?.facets.find((facet) => facet.id === selectedFacetID) ?? selected?.facets.toSorted((left, right) => right.share - left.share)[0];
+  const primaryLocation = model.layers.flatMap((layer) => layer.facets.map((facet) => ({ layer, facet }))).toSorted((left, right) => right.facet.share - left.facet.share)[0];
+  const hoveredLocation = model.layers.flatMap((layer) => layer.facets.map((facet) => ({ layer, facet }))).find(({ facet }) => facet.id === hoveredFacetID);
 
   const selectLayer = (layerID: number) => {
     const layer = model.layers.find((item) => item.id === layerID);
@@ -41,8 +44,8 @@ export default function DisableTower3D({ input }: { input: Analysis }) {
   };
 
   useEffect(() => {
-    if (architectureRef.current) applyWorldSelection(architectureRef.current, selectedID, selectedFacetID);
-  }, [selectedFacetID, selectedID]);
+    if (architectureRef.current) applyWorldSelection(architectureRef.current, selectedID, selectedFacetID, hoveredFacetID);
+  }, [hoveredFacetID, selectedFacetID, selectedID]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -135,6 +138,7 @@ export default function DisableTower3D({ input }: { input: Analysis }) {
     const raycaster = new THREE.Raycaster();
     const pointer = new THREE.Vector2();
     const pointerDown = new THREE.Vector2();
+    let lastHoveredFacet: string | undefined;
     const onPointerDown = (event: PointerEvent) => pointerDown.set(event.clientX, event.clientY);
     const intersect = (event: MouseEvent | PointerEvent) => {
       const bounds = canvas.getBoundingClientRect();
@@ -143,7 +147,18 @@ export default function DisableTower3D({ input }: { input: Analysis }) {
       return raycaster.intersectObjects(architecture.clickable, false)[0]?.object;
     };
     const onPointerMove = (event: PointerEvent) => {
-      canvas.style.cursor = intersect(event) ? "pointer" : "grab";
+      const hit = intersect(event);
+      const facetID = hit?.userData.facetID as string | undefined;
+      canvas.style.cursor = hit ? "pointer" : "grab";
+      if (facetID !== lastHoveredFacet) {
+        lastHoveredFacet = facetID;
+        setHoveredFacetID(facetID);
+      }
+    };
+    const onPointerLeave = () => {
+      lastHoveredFacet = undefined;
+      setHoveredFacetID(undefined);
+      canvas.style.cursor = "grab";
     };
     const onClick = (event: MouseEvent) => {
       if (pointerDown.distanceTo(new THREE.Vector2(event.clientX, event.clientY)) > 7) return;
@@ -155,6 +170,7 @@ export default function DisableTower3D({ input }: { input: Analysis }) {
     };
     canvas.addEventListener("pointerdown", onPointerDown);
     canvas.addEventListener("pointermove", onPointerMove);
+    canvas.addEventListener("pointerleave", onPointerLeave);
     canvas.addEventListener("click", onClick);
 
     const resize = () => {
@@ -171,15 +187,16 @@ export default function DisableTower3D({ input }: { input: Analysis }) {
     resize();
 
     let frame = 0;
-    const animate = () => {
+    const animate = (now: number) => {
       frame = requestAnimationFrame(animate);
       controls.update();
       targetRing.rotation.z += .0025;
+      animateWorldAttention(architecture, now);
       renderer.render(scene, camera);
       labelRenderer.render(scene, camera);
       canvas.dataset.threeReady = "true";
     };
-    animate();
+    frame = requestAnimationFrame(animate);
     const initialLayer = [...model.layers].sort((left, right) => right.share - left.share)[0] ?? model.layers[0];
     const initialFacet = initialLayer.facets.toSorted((left, right) => right.share - left.share)[0];
     applyWorldSelection(architecture, initialLayer.id, initialFacet?.id);
@@ -189,6 +206,7 @@ export default function DisableTower3D({ input }: { input: Analysis }) {
       observer.disconnect();
       canvas.removeEventListener("pointerdown", onPointerDown);
       canvas.removeEventListener("pointermove", onPointerMove);
+      canvas.removeEventListener("pointerleave", onPointerLeave);
       canvas.removeEventListener("click", onClick);
       controls.dispose();
       controlsRef.current = null;
@@ -208,6 +226,7 @@ export default function DisableTower3D({ input }: { input: Analysis }) {
     <canvas ref={canvasRef} aria-label="3D 世界层级归因塔" />
     <header className="tower-heading"><div><Layers3 size={17} /><div><p>五重世界仪 · 比例与权力的解剖</p><h3 id="tower-title">3D 世界约束塔</h3></div></div><button aria-label="重置3D视角" title="重置视角" onClick={resetView}><Box size={16} /></button></header>
     <div className="tower-target"><Crosshair size={14} /><span>当前问题</span><strong>{model.target}</strong></div>
+    <div className={`tower-interaction-hint ${hoveredLocation ? "is-hovered" : ""}`} aria-live="polite"><MousePointer2 size={14} /><span>{hoveredLocation ? "即将展开" : "首要归因"}</span><strong>{hoveredLocation ? `${hoveredLocation.layer.label} · ${hoveredLocation.facet.label}` : `${primaryLocation.layer.label} · ${primaryLocation.facet.label} ${primaryLocation.facet.share}%`}</strong><ArrowUpRight size={13} /></div>
     <nav className="tower-layers" aria-label="3D层级选择">{model.layers.map((layer, index) => {
       const art = worldArt[layer.domain];
       return <button style={{ "--layer-color": `#${art.color.toString(16).padStart(6, "0")}` } as CSSProperties} aria-label={`${String(index + 1).padStart(2, "0")}${layer.label}${layer.share}%`} aria-pressed={selected?.id === layer.id} className={selected?.id === layer.id ? "is-active" : ""} onClick={() => selectLayer(layer.id)} key={layer.id}><span>{String(index + 1).padStart(2, "0")}</span><div><strong>{layer.label}</strong><em>{art.latin} · {art.metaphor}</em></div><b>{layer.share}%</b></button>;
@@ -218,7 +237,7 @@ export default function DisableTower3D({ input }: { input: Analysis }) {
       <p className="tower-material"><strong>{worldArt[selected.domain].material}</strong><span>{worldArt[selected.domain].colorMeaning}</span></p>
       <div className="tower-ceiling"><span>层级天花板</span><strong>{Math.round(selected.ceilingStrength * 100)}</strong></div>
       <div className="tower-facets" aria-label={`${selected.label}子区域`}>{selected.facets.map((facet) => <button aria-pressed={facet.id === selectedFacet.id} className={facet.id === selectedFacet.id ? "is-active" : ""} onClick={() => openFacet(selected.id, facet.id)} key={facet.id}><span>{facet.label}</span><b>{facet.share}%</b></button>)}</div>
-      <div className="tower-pinpoint"><header><span>问题定位</span><strong>{selectedFacet.label}</strong><b>{selectedFacet.share}%</b></header><p>{selectedFacet.description}</p>{selected.nodes.filter((node) => node.facetID === selectedFacet.id).map((node) => <span key={node.id}>{node.label} · {interventionLabels[node.intervention]}</span>)}<button className="tower-open-dossier" onClick={() => setDossierOpen(true)}><BookOpen size={13} />打开制度卷宗</button></div>
+      <div className="tower-pinpoint"><header><span>问题定位</span><strong>{selectedFacet.label}</strong><b>{selectedFacet.share}%</b></header><p>{selectedFacet.description}</p>{selected.nodes.filter((node) => node.facetID === selectedFacet.id).map((node) => <span key={node.id}>{node.label} · {interventionLabels[node.intervention]}</span>)}<button className="tower-open-dossier" onClick={() => setDossierOpen(true)}><BookOpen size={13} />打开制度卷宗<ArrowUpRight size={12} /></button></div>
     </aside>}
     {selected && selectedFacet && <WorldDossierDrawer layer={selected} facet={selectedFacet} open={dossierOpen} onClose={() => setDossierOpen(false)} />}
     {unsupported && <p className="tower-fallback">此设备无法启用 WebGL，完整归因仍可在下方查看。</p>}
