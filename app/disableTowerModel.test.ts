@@ -12,6 +12,9 @@ describe("buildDisableTower", () => {
     expect(model.layers.map((layer) => layer.share)).toEqual([18, 28, 14, 18, 22]);
     expect(model.layers.every((layer) => layer.facets.length === 5)).toBe(true);
     expect(model.layers.every((layer, index) => index === 0 || layer.y > model.layers[index - 1].y)).toBe(true);
+    expect(model.layers.every((layer, index) => index === 0 || layer.width > model.layers[index - 1].width)).toBe(true);
+    expect(model.layers.at(-1)!.width - model.layers[0].width).toBeGreaterThan(2.5);
+    expect(model.layers[1].y - model.layers[0].y).toBeCloseTo(1.92);
     expect(model.layers.find((layer) => layer.label === "组织与团体")?.facets.find((facet) => facet.id === "organization.resource")?.share).toBe(28);
     expect(model.layers.find((layer) => layer.label === "国家制度")?.ceilingStrength).toBeCloseTo(.88);
     expect(model.layers.flatMap((layer) => layer.nodes).find((node) => node.id === "global")?.facetLabel).toBe("资本金融");

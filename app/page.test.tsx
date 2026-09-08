@@ -71,7 +71,15 @@ describe("Home", () => {
     expect(screen.getByText("导航模型")).toBeInTheDocument();
     expect(screen.getByLabelText("3D 世界层级归因塔")).toBeInTheDocument();
     expect(screen.getByText("3D 世界约束塔")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "组织资源70%" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "组织资源70%" }));
+    expect(screen.getByRole("dialog", { name: "组织资源" })).toBeInTheDocument();
+    expect(screen.getByText("制度如何起作用")).toBeInTheDocument();
+    expect(screen.getByText("共享资源形成排队与争抢")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "关闭制度卷宗" }));
+    fireEvent.click(screen.getByRole("button", { name: /04国家制度0%/ }));
+    fireEvent.click(screen.getByRole("button", { name: "法律权利0%" }));
+    expect(screen.getByRole("link", { name: /国家法律法规数据库/ })).toHaveAttribute("href", "https://flk.npc.gov.cn/");
+    fireEvent.click(screen.getByRole("button", { name: "关闭制度卷宗" }));
     expect(screen.getByText("问题定位")).toBeInTheDocument();
     const detailsSummary = screen.getByText("展开完整归因与二维因果图");
     const details = detailsSummary.closest("details");
