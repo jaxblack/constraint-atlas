@@ -8,6 +8,7 @@ describe("buildDisableTower", () => {
 
     expect(model.totalContribution).toBe(100);
     expect(model.layers).toHaveLength(5);
+    expect(model.layers.map((layer) => layer.domain)).toEqual(["personal", "organization", "norm", "state", "global"]);
     expect(model.layers.map((layer) => layer.label)).toEqual(["个人五层需求", "组织与团体", "社会规范", "国家制度", "全球经济"]);
     expect(model.layers.map((layer) => layer.share)).toEqual([18, 28, 14, 18, 22]);
     expect(model.layers.every((layer) => layer.facets.length === 5)).toBe(true);

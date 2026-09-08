@@ -1,4 +1,5 @@
 import { analysisSchema, type Analysis } from "./analysis";
+import { worldArt, worldArtOrder } from "./worldArt";
 
 export type TowerNode = {
   id: string;
@@ -27,6 +28,7 @@ export type TowerFacet = {
 
 export type TowerLayer = {
   id: number;
+  domain: Analysis["layers"][number]["domain"];
   label: string;
   description: string;
   share: number;
@@ -47,7 +49,7 @@ export type DisableTowerModel = {
   totalContribution: number;
 };
 
-const colors = [0xb64d31, 0xa2762e, 0x73805a, 0x496c82, 0x2f7568];
+const colors = worldArtOrder.map((domain) => worldArt[domain].color);
 const hardness = { hard: 1, permission: .88, resource: .72, capability: .62, coordination: .52, temporary: .3, none: .1 } as const;
 const facetPositions = [
   [-2.35, -1.15],
@@ -87,6 +89,7 @@ export function buildDisableTower(input: Analysis): DisableTowerModel {
     }));
     return {
       id: layer.id,
+      domain: layer.domain,
       label: layer.label,
       description: layer.description,
       share,

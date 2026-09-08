@@ -71,6 +71,9 @@ describe("Home", () => {
     expect(screen.getByText("导航模型")).toBeInTheDocument();
     expect(screen.getByLabelText("3D 世界层级归因塔")).toBeInTheDocument();
     expect(screen.getByText("3D 世界约束塔")).toBeInTheDocument();
+    expect(screen.getByText("OFFICINA · 共同工作")).toBeInTheDocument();
+    expect(screen.getByText("赭石木构")).toBeInTheDocument();
+    expect(screen.getByText("建造、分工与共享资源")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "组织资源70%" }));
     expect(screen.getByRole("dialog", { name: "组织资源" })).toBeInTheDocument();
     expect(screen.getByText("制度如何起作用")).toBeInTheDocument();
