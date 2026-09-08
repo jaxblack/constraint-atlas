@@ -18,15 +18,22 @@ describe("Home", () => {
           analysis: {
             title: "是否现在转行",
             conclusion: "先用低成本实验验证新方向，而不是立刻辞职。",
+            disablement: { target: "在收入不断的前提下转行", status: "mixed", topBlocker: "现金流约束" },
+            scales: [
+              { id: "micro", diagnosis: "现金流不足以支持裸辞。", prediction: "直接裸辞会快速增加决策压力。", nextStep: "计算六个月安全垫。" },
+              { id: "meso", diagnosis: "成长停滞已经重复出现。", prediction: "不改变工作内容会继续消耗自主感。", nextStep: "验证三个外部岗位。" },
+              { id: "macro", diagnosis: "劳动市场用持续收入约束职业切换。", prediction: "有稀缺技能时转换成本下降。", nextStep: "用作品验证稀缺性。" },
+            ],
+            theoryAudit: { function: "navigation", predictivePower: 72, explanation: "它能推出可验证的求职策略。", falsifier: "若外部岗位验证仍无改善，则模型不足。" },
             layers: [
               { id: 1, label: "底层诉求", description: "真正需要保护的东西" },
               { id: 2, label: "现实边界", description: "短期不可忽略的限制" },
               { id: 3, label: "行动空间", description: "可逆的下一步" },
             ],
             nodes: [
-              { id: "need", kind: "need", layer: 1, label: "需要更多自主感", detail: "这是核心需求。" },
-              { id: "constraint", kind: "constraint", layer: 2, label: "现金流只能支撑三个月", detail: "这是硬约束。" },
-              { id: "action", kind: "action", layer: 3, label: "周末完成一次真实项目", detail: "这是下一步。" },
+              { id: "need", kind: "need", layer: 1, contribution: 30, confidence: 80, disableState: "temporary", intervention: "experiment", label: "需要更多自主感", detail: "这是核心需求。" },
+              { id: "constraint", kind: "constraint", layer: 2, contribution: 70, confidence: 95, disableState: "resource", intervention: "acquire", label: "现金流只能支撑三个月", detail: "这是硬约束。" },
+              { id: "action", kind: "action", layer: 3, contribution: 0, confidence: 90, disableState: "none", intervention: "experiment", label: "周末完成一次真实项目", detail: "这是下一步。" },
             ],
             edges: [
               { source: "need", target: "constraint", relation: "受限于" },
@@ -46,14 +53,22 @@ describe("Home", () => {
     fireEvent.click(screen.getByRole("button", { name: "开始拆解" }));
 
     expect(await screen.findByText("先用低成本实验验证新方向，而不是立刻辞职。")).toBeInTheDocument();
-    expect(screen.getAllByText("01 · 底层诉求")).toHaveLength(2);
-    expect(screen.getAllByText("02 · 现实边界")).toHaveLength(2);
-    expect(screen.getAllByText("03 · 行动空间")).toHaveLength(2);
-    expect(screen.getByText("现金流只能支撑三个月")).toBeInTheDocument();
+    expect(screen.getAllByText("01 · 底层诉求")).toHaveLength(3);
+    expect(screen.getAllByText("02 · 现实边界")).toHaveLength(3);
+    expect(screen.getAllByText("03 · 行动空间")).toHaveLength(3);
+    expect(screen.getAllByText("现金流只能支撑三个月")).toHaveLength(2);
     expect(screen.getByText("周末完成一次真实项目")).toBeInTheDocument();
     expect(screen.getByText("受限于")).toBeInTheDocument();
     expect(screen.getByText("转化为")).toBeInTheDocument();
     expect(container.querySelectorAll(".causal-connector")).toHaveLength(2);
+    expect(screen.getByText("100% Disable 归因")).toBeInTheDocument();
+    expect(screen.getAllByText("70%").length).toBeGreaterThan(0);
+    expect(screen.getByRole("tab", { name: "微观模式" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "中观模式" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "宏观模式" })).toBeInTheDocument();
+    expect(screen.getByText("导航模型")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("tab", { name: "宏观模式" }));
+    expect(screen.getByText("劳动市场用持续收入约束职业切换。")).toBeInTheDocument();
   });
 
   it("runs a built-in test case with one click", async () => {
@@ -87,7 +102,7 @@ describe("Home", () => {
     expect(screen.getAllByRole("button", { name: /运行案例：/ })).toHaveLength(5);
     fireEvent.click(screen.getByRole("button", { name: "运行案例：资源有限时先做哪条产品线" }));
 
-    expect(await screen.findByText("先验证影响最大且可逆的一条路径。")).toBeInTheDocument();
+    expect((await screen.findAllByText("先验证影响最大且可逆的一条路径。")).length).toBeGreaterThan(0);
     expect(fetchMock).toHaveBeenCalledWith(
       "/constraint-atlas/api/analyze",
       expect.objectContaining({

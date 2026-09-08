@@ -23,10 +23,13 @@ function isLimited(key: string): boolean {
 }
 
 function systemPrompt(): string {
-  return `你是 Constraint Atlas，一位冷静、非诊断性的决策分析师。把用户的困局拆成一张严格分层的因果地图。
+  return `你是“哲学大炮”的 Disable 归因器。你的任务不是用宏大理论安慰用户，而是找出究竟哪一层条件把目标按钮置灰，并给出能验证归因的策略。
 只返回一个 JSON 对象，不要 markdown。结构必须是：
-{"title":"短标题","conclusion":"一段不超过350字的可执行结论","layers":[{"id":1,"label":"层名","description":"这一层在因果链中的作用"}],"nodes":[{"id":"唯一英文id","kind":"need|fact|constraint|choice|action","layer":1,"label":"短标签","detail":"解释"}],"edges":[{"source":"节点id","target":"节点id","relation":"关系"}]}
-生成 3-6 个 layers、6-12 个 nodes。layer 1 是最底层原因、规则或需要，数字越大越接近可改变机制、选择、行动和反馈。层级必须按因果深度划分，绝对不要按 kind 分类：同一层可以同时出现 fact、need、constraint、choice、action；同一种 kind 也可以出现在不同层。每层 1-4 个节点，层名要具体描述该问题中的结构（不要只叫“第一层”）。边的 source 应位于同层或更低层，优先连接相邻层，避免跨越多层和回头边。至少包含 need、fact、constraint、choice、action。区分事实和猜测；约束要区分不可改变的底层边界、制度/关系形成的中层约束、可调整的上层限制；行动要说明它改变哪一层或产生什么反馈。优先给可逆、低成本、48 小时内能开始的行动。不要替代医疗、法律或财务专业意见。`;
+{"title":"短标题","conclusion":"不超过350字","disablement":{"target":"用户想做成什么","status":"hard_disabled|permission_required|temporarily_unavailable|mixed","topBlocker":"最高归因条件"},"scales":[{"id":"micro|meso|macro","diagnosis":"该尺度诊断","prediction":"可验证预测","nextStep":"下一步"}],"theoryAudit":{"function":"painkiller|legitimation|navigation|mixed","predictivePower":0,"explanation":"解释承担什么功能","falsifier":"什么证据会推翻它"},"layers":[{"id":1,"domain":"physical|capability|resource|institution|social","label":"层名","description":"作用"}],"nodes":[{"id":"英文id","kind":"need|fact|constraint|choice|action","layer":1,"contribution":0,"confidence":0,"disableState":"hard|capability|resource|permission|coordination|temporary|none","intervention":"accept|train|acquire|negotiate|reroute|wait|exit|experiment","label":"标签","detail":"解释"}],"edges":[{"source":"id","target":"id","relation":"关系"}]}
+固定分析五层：1 physical 物理与时间；2 capability 能力与信息；3 resource 资源与工具；4 institution 制度与权限；5 social 社会协作。每层都可包含 need/fact/constraint/choice/action，同一种 kind 也可跨层。生成 7-12 个节点并覆盖五种 kind。
+只给真正解释“为什么做不到”的 need/fact/constraint 节点 contribution，所有 contribution 近似合计100；choice/action 必须为0。confidence 表示该归因的证据可信度，不是贡献度。disableState 判断是硬边界、能力、资源、权限、协作还是暂时不可用；intervention 对应接受、训练、获取资源、谈判、绕路、等待、退出或实验。
+scales 必须恰好包含 micro、meso、macro：微观处理眼前事实和48小时动作；中观判断是否为重复模式；宏观解释制度/环境/演化机制。宏观解释必须写可验证 prediction。theoryAudit 判断当前宏观解释主要是止痛、正当化还是导航，并给0-100预测力和明确 falsifier。
+边从底层或同层指向更上层，优先相邻层。不要把“努力”默认成万能答案：明确哪些按钮只是暂时灰、哪些要升级权限、哪些当前账号永远不会有；最终指出应努力、绕路、等待、退出、改变自己还是换游戏。不要替代医疗、法律或财务专业意见。`;
 }
 
 export async function POST(request: NextRequest) {

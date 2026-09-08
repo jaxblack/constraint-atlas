@@ -5,6 +5,7 @@ import { Background, Controls, Edge, Node, ReactFlow, type ReactFlowInstance } f
 import { ArrowDown, ArrowRight, Clock3, Compass, FlaskConical, History, Layers3, Map as MapIcon, Play, Sparkles, Trash2 } from "lucide-react";
 import "@xyflow/react/dist/style.css";
 import { analysisSchema, type Analysis } from "./analysis";
+import InsightPanels from "./InsightPanels";
 
 type SavedAnalysis = { id: string; question: string; createdAt: string; analysis: Analysis; source: "model" | "fallback" };
 const STORAGE_KEY = "constraint-atlas-history-v1";
@@ -18,10 +19,12 @@ const demoCases = [
 ];
 
 const kindLabels = { need: "需求", fact: "事实", constraint: "约束", choice: "选择", action: "行动" } as const;
-const layerHeight = 176;
-const layerGap = 44;
+const disableStateLabels = { hard: "硬边界", capability: "能力缺口", resource: "资源缺口", permission: "权限禁用", coordination: "协作阻塞", temporary: "暂时不可用", none: "响应节点" } as const;
+const interventionLabels = { accept: "接受边界", train: "升级能力", acquire: "获取资源", negotiate: "协商合作", reroute: "绕路/换系统", wait: "等待窗口", exit: "退出游戏", experiment: "小步验证" } as const;
+const layerHeight = 210;
+const layerGap = 52;
 const nodeWidth = 214;
-const nodeHeight = 108;
+const nodeHeight = 142;
 const nodeGap = 22;
 const layerHeaderWidth = 184;
 
@@ -49,6 +52,7 @@ function flowElements(input: Analysis): { nodes: Node[]; edges: Edge[]; canvasHe
   }));
   const maxNodes = Math.max(...[...grouped.values()].map((nodes) => nodes.length), 1);
   const layerWidth = Math.max(920, layerHeaderWidth + 30 + maxNodes * nodeWidth + Math.max(0, maxNodes - 1) * nodeGap + 28);
+  const layerShares = new Map(analysis.layers.map((layer) => [layer.id, analysis.nodes.filter((node) => node.layer === layer.id).reduce((sum, node) => sum + node.contribution, 0)]));
   const layerNodes: Node[] = analysis.layers.map((layer, index) => ({
     id: `layer-${layer.id}`,
     type: "group",
@@ -65,7 +69,7 @@ function flowElements(input: Analysis): { nodes: Node[]; edges: Edge[]; canvasHe
     id: `layer-label-${layer.id}`,
     className: "causal-layer-label",
     position: { x: 16, y: index * (layerHeight + layerGap) + 25 },
-    data: { label: <div className="causal-layer-heading"><span>层级</span><strong>{String(index + 1).padStart(2, "0")} · {layer.label}</strong><p>{layer.description}</p></div> },
+    data: { label: <div className="causal-layer-heading"><span>层级归因</span><strong>{String(index + 1).padStart(2, "0")} · {layer.label}<b>{layerShares.get(layer.id)}%</b></strong><p>{layer.description}</p></div> },
     style: { width: 162, border: 0, padding: 0, background: "transparent" },
     zIndex: 2,
     draggable: false,
@@ -80,7 +84,11 @@ function flowElements(input: Analysis): { nodes: Node[]; edges: Edge[]; canvasHe
   const mapNodes: Node[] = positionedNodes.map(({ item, position }) => ({
     id: item.id,
     position,
-    data: { label: <div className={`map-node map-node--${item.kind}`}><span><i />{kindLabels[item.kind]}</span><strong>{item.label}</strong><p>{item.detail}</p></div> },
+    data: { label: <div className={`map-node map-node--${item.kind}`}>
+      <span><i />{kindLabels[item.kind]}<b className={item.contribution > 0 ? "has-contribution" : ""}>{item.contribution > 0 ? `${item.contribution}%` : "响应"}</b></span>
+      <strong>{item.label}</strong><p>{item.detail}</p>
+      <div className="map-node-meta"><em>{disableStateLabels[item.disableState]}</em><em>{interventionLabels[item.intervention]}</em><small>可信 {item.confidence}%</small></div>
+    </div> },
     style: { width: nodeWidth, border: 0, padding: 0, background: "transparent" },
     zIndex: 3,
     draggable: false,
@@ -246,12 +254,13 @@ export default function Home() {
                 <span className={`source source--${current.source}`}>{current.source === "model" ? "AI 分析" : "离线分析"}</span>
               </div>
               <div className="conclusion"><MapIcon size={20} /><div><span>地图结论</span><p>{current.analysis.conclusion}</p></div></div>
+              <InsightPanels input={current.analysis} />
               <div className="layer-guide">
                 <div><Layers3 size={17} /><strong>{flow.layers.length} 层因果结构</strong><span>类型不等于层级；每层都可能包含需求、事实、约束、选择与行动。</span></div>
                 <div className="kind-legend">{Object.entries(kindLabels).map(([kind, label]) => <span className={`kind-${kind}`} key={kind}><i />{label}</span>)}</div>
                 <div className="causal-direction">底层原因 <ArrowDown size={13} /> 上层行动</div>
               </div>
-              <ol className="layer-index" aria-label="因果层级索引">{flow.layers.map((layer, index) => <li key={layer.id}><strong>{String(index + 1).padStart(2, "0")} · {layer.label}</strong><span>{layer.description}</span></li>)}</ol>
+              <ol className="layer-index" aria-label="因果层级索引">{flow.layers.map((layer, index) => <li key={layer.id}><strong>{String(index + 1).padStart(2, "0")} · {layer.label}<b>{analysisSchema.parse(current.analysis).nodes.filter((node) => node.layer === layer.id).reduce((sum, node) => sum + node.contribution, 0)}%</b></strong><span>{layer.description}</span></li>)}</ol>
               <div className="flow-wrap flow-wrap--layered" style={{ height: flow.canvasHeight, "--mobile-flow-height": `${Math.ceil(flow.canvasHeight * 0.72)}px` } as CSSProperties}><ReactFlow nodes={flow.nodes} edges={flow.edges} fitView fitViewOptions={{ padding: 0.025, minZoom: 0.68, maxZoom: 1 }} onInit={alignMobileFlow} minZoom={0.32} maxZoom={1.15} nodesDraggable={false} nodesConnectable={false} elementsSelectable={false} panOnScroll={false} zoomOnScroll={false}><Background color="#d2d9d3" gap={22} size={1} /><Controls showInteractive={false} /></ReactFlow></div>
             </section>
           ) : (

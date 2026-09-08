@@ -46,4 +46,32 @@ describe("analysisSchema", () => {
 
     expect(result.success).toBe(true);
   });
+
+  it("normalizes causal attribution to 100 without blaming choices or actions", () => {
+    const result = analysisSchema.parse({
+      title: "为什么按钮是灰的",
+      conclusion: "主要阻塞来自制度权限和资源。",
+      layers: [
+        { id: 1, label: "物理与时间", description: "不可绕过的底层边界" },
+        { id: 2, label: "制度与权限", description: "账号在系统中的许可" },
+        { id: 3, label: "选择与行动", description: "仍可调整的策略" },
+      ],
+      nodes: [
+        { id: "time", kind: "fact", layer: 1, contribution: 10, label: "时间窗口", detail: "一天只有二十四小时。" },
+        { id: "permission", kind: "constraint", layer: 2, contribution: 50, label: "缺少权限", detail: "当前身份不能批准。" },
+        { id: "money", kind: "constraint", layer: 2, contribution: 20, label: "预算不足", detail: "当前预算无法覆盖。" },
+        { id: "route", kind: "choice", layer: 3, contribution: 80, label: "换账号", detail: "选择不是阻塞原因。" },
+        { id: "ask", kind: "action", layer: 3, contribution: 90, label: "申请权限", detail: "行动不是阻塞原因。" },
+      ],
+      edges: [
+        { source: "time", target: "permission", relation: "限制" },
+        { source: "permission", target: "route", relation: "迫使" },
+        { source: "money", target: "ask", relation: "需要" },
+      ],
+    });
+
+    expect(result.nodes.reduce((sum, node) => sum + node.contribution, 0)).toBe(100);
+    expect(result.nodes.find((node) => node.id === "route")?.contribution).toBe(0);
+    expect(result.nodes.find((node) => node.id === "ask")?.contribution).toBe(0);
+  });
 });
