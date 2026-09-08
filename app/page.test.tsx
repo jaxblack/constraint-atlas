@@ -38,7 +38,7 @@ describe("Home", () => {
       }),
     );
 
-    render(<Home />);
+    const { container } = render(<Home />);
 
     fireEvent.change(screen.getByRole("textbox", { name: "把你卡住的问题写下来" }), {
       target: { value: "我想转行，但担心收入不稳定，应该现在辞职吗？" },
@@ -51,6 +51,9 @@ describe("Home", () => {
     expect(screen.getAllByText("03 · 行动空间")).toHaveLength(2);
     expect(screen.getByText("现金流只能支撑三个月")).toBeInTheDocument();
     expect(screen.getByText("周末完成一次真实项目")).toBeInTheDocument();
+    expect(screen.getByText("受限于")).toBeInTheDocument();
+    expect(screen.getByText("转化为")).toBeInTheDocument();
+    expect(container.querySelectorAll(".causal-connector")).toHaveLength(2);
   });
 
   it("runs a built-in test case with one click", async () => {

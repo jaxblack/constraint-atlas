@@ -98,9 +98,14 @@ textarea::placeholder { color: #98a39c; }
 .map-node strong { display: block; margin-top: 4px; color: #29362f; font-size: 13px; }
 .map-node p { margin: 5px 0 0; color: #67746c; font-size: 10px; line-height: 1.35; }
 .map-node--need { border-top-color: #b55734; }.map-node--need span { color: #b55734; }.map-node--constraint { border-top-color: #9a7032; }.map-node--constraint span { color: #9a7032; }.map-node--choice { border-top-color: #476f82; }.map-node--choice span { color: #476f82; }.map-node--action { border-top-color: #397151; }.map-node--action span { color: #397151; }.map-node--fact { border-top-color: #68757b; }.map-node--fact span { color: #68757b; }
-.react-flow__node-default:has(.map-node) .react-flow__handle { width: 5px; height: 5px; border: 0; background: #708078; opacity: .24; }
-.react-flow__edge-path { stroke-linecap: round; }
-.react-flow__edge-textbg { filter: drop-shadow(0 1px 1px rgb(43 60 49 / 8%)); }
+.react-flow__node-default:has(.map-node) .react-flow__handle { display: none; }
+.react-flow__node-default.causal-connector { box-shadow: none; pointer-events: none; }
+.causal-connector-content { position: relative; }
+.causal-connector-content svg { display: block; overflow: visible; }
+.causal-connector-content path { fill: none; stroke: #64776b; stroke-width: 1.45; stroke-linecap: round; }
+.causal-connector-content marker path { fill: #64776b; stroke: none; }
+.causal-connector-content path.is-same-layer, .causal-connector-content path.is-backward { stroke-dasharray: 4 4; }
+.causal-connector-content > span { position: absolute; left: 50%; top: 50%; z-index: 1; transform: translate(-50%, -50%); border: 1px solid #d4dad5; border-radius: 3px; padding: 2px 5px; background: rgb(248 248 244 / 94%); color: #46584d; font-size: 9px; font-weight: 700; white-space: nowrap; }
 .react-flow__controls { box-shadow: none !important; }.react-flow__controls-button { border-color: #d3d8d4 !important; background: #fffefa !important; }
 footer { display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 18px; color: #849087; font-size: 10px; }
 .spin { animation: spin 1.4s linear infinite; } @keyframes spin { to { transform: rotate(360deg); } }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type CSSProperties } from "react";
-import { Background, Controls, Edge, MarkerType, Node, Position, ReactFlow, type ReactFlowInstance } from "@xyflow/react";
+import { Background, Controls, Edge, Node, ReactFlow, type ReactFlowInstance } from "@xyflow/react";
 import { ArrowDown, ArrowRight, Clock3, Compass, FlaskConical, History, Layers3, Map as MapIcon, Play, Sparkles, Trash2 } from "lucide-react";
 import "@xyflow/react/dist/style.css";
 import { analysisSchema, type Analysis } from "./analysis";
@@ -21,6 +21,7 @@ const kindLabels = { need: "需求", fact: "事实", constraint: "约束", choic
 const layerHeight = 176;
 const layerGap = 44;
 const nodeWidth = 214;
+const nodeHeight = 108;
 const nodeGap = 22;
 const layerHeaderWidth = 184;
 
@@ -71,32 +72,79 @@ function flowElements(input: Analysis): { nodes: Node[]; edges: Edge[]; canvasHe
     selectable: false,
     focusable: false,
   }));
-  const mapNodes: Node[] = analysis.layers.flatMap((layer) => (grouped.get(layer.id) ?? []).map((item, index) => ({
+  const positionedNodes = analysis.layers.flatMap((layer, layerIndex) => (grouped.get(layer.id) ?? []).map((item, index) => ({
+    item,
+    position: { x: layerHeaderWidth + 24 + index * (nodeWidth + nodeGap), y: layerIndex * (layerHeight + layerGap) + 34 },
+  })));
+  const nodePosition = new Map(positionedNodes.map(({ item, position }) => [item.id, { ...position, layer: item.layer }]));
+  const mapNodes: Node[] = positionedNodes.map(({ item, position }) => ({
     id: item.id,
-    position: { x: layerHeaderWidth + 24 + index * (nodeWidth + nodeGap), y: analysis.layers.findIndex((candidate) => candidate.id === layer.id) * (layerHeight + layerGap) + 34 },
-    sourcePosition: Position.Bottom,
-    targetPosition: Position.Top,
+    position,
     data: { label: <div className={`map-node map-node--${item.kind}`}><span><i />{kindLabels[item.kind]}</span><strong>{item.label}</strong><p>{item.detail}</p></div> },
     style: { width: nodeWidth, border: 0, padding: 0, background: "transparent" },
     zIndex: 3,
     draggable: false,
     selectable: false,
-  })));
-  const nodeLayer = new Map(analysis.nodes.map((node) => [node.id, node.layer]));
-  const edges = analysis.edges.map((item, index) => ({
-    id: `edge-${index}`,
-    source: item.source,
-    target: item.target,
-    label: item.relation,
-    type: "smoothstep",
-    markerEnd: { type: MarkerType.ArrowClosed },
-    style: { stroke: "#64776b", strokeWidth: 1.35, strokeDasharray: nodeLayer.get(item.source) === nodeLayer.get(item.target) ? "4 4" : undefined },
-    labelStyle: { fill: "#46584d", fontSize: 10, fontWeight: 700 },
-    labelBgStyle: { fill: "#f5f5f0", fillOpacity: 0.94 },
-    labelBgPadding: [5, 3] as [number, number],
-    labelBgBorderRadius: 3,
   }));
-  return { nodes: [...layerNodes, ...layerLabelNodes, ...mapNodes], edges, canvasHeight: analysis.layers.length * (layerHeight + layerGap) - layerGap + 36, layers: analysis.layers };
+  const connectorNodes: Node[] = analysis.edges.flatMap((item, index) => {
+    const source = nodePosition.get(item.source);
+    const target = nodePosition.get(item.target);
+    if (!source || !target) return [];
+
+    const sourceX = source.x + nodeWidth / 2;
+    const targetX = target.x + nodeWidth / 2;
+    const markerID = `connector-arrow-${index}`;
+    const sameLayer = source.layer === target.layer;
+    let left: number;
+    let top: number;
+    let width: number;
+    let height: number;
+    let path: string;
+    if (sameLayer) {
+      left = Math.min(sourceX, targetX) - 12;
+      top = source.y + nodeHeight;
+      width = Math.max(24, Math.abs(targetX - sourceX) + 24);
+      height = 48;
+      const startX = sourceX - left;
+      const endX = targetX - left;
+      path = `M ${startX} 0 C ${startX} 40, ${endX} 40, ${endX} 0`;
+    } else {
+      const sourceY = source.y + nodeHeight;
+      const targetY = target.y;
+      left = Math.min(sourceX, targetX) - 12;
+      top = Math.min(sourceY, targetY);
+      width = Math.max(24, Math.abs(targetX - sourceX) + 24);
+      height = Math.max(2, Math.abs(targetY - sourceY));
+      const startX = sourceX - left;
+      const endX = targetX - left;
+      const startY = sourceY - top;
+      const endY = targetY - top;
+      const middleY = (startY + endY) / 2;
+      path = `M ${startX} ${startY} C ${startX} ${middleY}, ${endX} ${middleY}, ${endX} ${endY}`;
+    }
+
+    return [{
+      id: `connector-${index}`,
+      className: "causal-connector",
+      position: { x: left, y: top },
+      data: {
+        label: <div className="causal-connector-content" style={{ width, height }}>
+          <svg aria-hidden="true" width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
+            <defs><marker id={markerID} markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M 0 0 L 7 3.5 L 0 7 z" /></marker></defs>
+            <path className={sameLayer ? "is-same-layer" : source.layer > target.layer ? "is-backward" : ""} d={path} markerEnd={`url(#${markerID})`} />
+          </svg>
+          <span>{item.relation}</span>
+        </div>,
+      },
+      style: { width, height, border: 0, padding: 0, background: "transparent", pointerEvents: "none" },
+      zIndex: 1,
+      draggable: false,
+      selectable: false,
+      focusable: false,
+    }];
+  });
+  const edges: Edge[] = [];
+  return { nodes: [...layerNodes, ...connectorNodes, ...layerLabelNodes, ...mapNodes], edges, canvasHeight: analysis.layers.length * (layerHeight + layerGap) - layerGap + 36, layers: analysis.layers };
 }
 
 export default function Home() {
