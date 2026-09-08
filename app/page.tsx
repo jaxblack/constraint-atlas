@@ -2,9 +2,10 @@
 
 import { useEffect, useState, type CSSProperties } from "react";
 import { Background, Controls, Edge, Node, ReactFlow, type ReactFlowInstance } from "@xyflow/react";
-import { ArrowDown, ArrowRight, Clock3, Compass, FlaskConical, History, Layers3, Map as MapIcon, Play, Sparkles, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowRight, ChevronDown, Clock3, Compass, FlaskConical, History, Layers3, Map as MapIcon, Play, Sparkles, Trash2 } from "lucide-react";
 import "@xyflow/react/dist/style.css";
 import { analysisSchema, type Analysis } from "./analysis";
+import DisableTower3D from "./DisableTower3D";
 import InsightPanels from "./InsightPanels";
 
 type SavedAnalysis = { id: string; question: string; createdAt: string; analysis: Analysis; source: "model" | "fallback" };
@@ -254,14 +255,20 @@ export default function Home() {
                 <span className={`source source--${current.source}`}>{current.source === "model" ? "AI 分析" : "离线分析"}</span>
               </div>
               <div className="conclusion"><MapIcon size={20} /><div><span>地图结论</span><p>{current.analysis.conclusion}</p></div></div>
-              <InsightPanels input={current.analysis} />
-              <div className="layer-guide">
-                <div><Layers3 size={17} /><strong>{flow.layers.length} 层因果结构</strong><span>类型不等于层级；每层都可能包含需求、事实、约束、选择与行动。</span></div>
-                <div className="kind-legend">{Object.entries(kindLabels).map(([kind, label]) => <span className={`kind-${kind}`} key={kind}><i />{label}</span>)}</div>
-                <div className="causal-direction">底层原因 <ArrowDown size={13} /> 上层行动</div>
-              </div>
-              <ol className="layer-index" aria-label="因果层级索引">{flow.layers.map((layer, index) => <li key={layer.id}><strong>{String(index + 1).padStart(2, "0")} · {layer.label}<b>{analysisSchema.parse(current.analysis).nodes.filter((node) => node.layer === layer.id).reduce((sum, node) => sum + node.contribution, 0)}%</b></strong><span>{layer.description}</span></li>)}</ol>
-              <div className="flow-wrap flow-wrap--layered" style={{ height: flow.canvasHeight, "--mobile-flow-height": `${Math.ceil(flow.canvasHeight * 0.72)}px` } as CSSProperties}><ReactFlow nodes={flow.nodes} edges={flow.edges} fitView fitViewOptions={{ padding: 0.025, minZoom: 0.68, maxZoom: 1 }} onInit={alignMobileFlow} minZoom={0.32} maxZoom={1.15} nodesDraggable={false} nodesConnectable={false} elementsSelectable={false} panOnScroll={false} zoomOnScroll={false}><Background color="#d2d9d3" gap={22} size={1} /><Controls showInteractive={false} /></ReactFlow></div>
+              <DisableTower3D input={current.analysis} />
+              <details className="analysis-details">
+                <summary><span>展开完整归因与二维因果图</span><ChevronDown size={16} /></summary>
+                <div className="analysis-details-body">
+                  <InsightPanels input={current.analysis} />
+                  <div className="layer-guide">
+                    <div><Layers3 size={17} /><strong>{flow.layers.length} 层因果结构</strong><span>类型不等于层级；每层都可能包含需求、事实、约束、选择与行动。</span></div>
+                    <div className="kind-legend">{Object.entries(kindLabels).map(([kind, label]) => <span className={`kind-${kind}`} key={kind}><i />{label}</span>)}</div>
+                    <div className="causal-direction">底层原因 <ArrowDown size={13} /> 上层行动</div>
+                  </div>
+                  <ol className="layer-index" aria-label="因果层级索引">{flow.layers.map((layer, index) => <li key={layer.id}><strong>{String(index + 1).padStart(2, "0")} · {layer.label}<b>{analysisSchema.parse(current.analysis).nodes.filter((node) => node.layer === layer.id).reduce((sum, node) => sum + node.contribution, 0)}%</b></strong><span>{layer.description}</span></li>)}</ol>
+                  <div className="flow-wrap flow-wrap--layered" style={{ height: flow.canvasHeight, "--mobile-flow-height": `${Math.ceil(flow.canvasHeight * 0.72)}px` } as CSSProperties}><ReactFlow nodes={flow.nodes} edges={flow.edges} fitView fitViewOptions={{ padding: 0.025, minZoom: 0.68, maxZoom: 1 }} onInit={alignMobileFlow} minZoom={0.32} maxZoom={1.15} nodesDraggable={false} nodesConnectable={false} elementsSelectable={false} panOnScroll={false} zoomOnScroll={false}><Background color="#d2d9d3" gap={22} size={1} /><Controls showInteractive={false} /></ReactFlow></div>
+                </div>
+              </details>
             </section>
           ) : (
             <section className="blank-map">

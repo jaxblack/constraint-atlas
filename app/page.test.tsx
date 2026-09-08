@@ -67,6 +67,12 @@ describe("Home", () => {
     expect(screen.getByRole("tab", { name: "中观模式" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "宏观模式" })).toBeInTheDocument();
     expect(screen.getByText("导航模型")).toBeInTheDocument();
+    expect(screen.getByLabelText("3D Disable 归因塔")).toBeInTheDocument();
+    const detailsSummary = screen.getByText("展开完整归因与二维因果图");
+    const details = detailsSummary.closest("details");
+    expect(details).not.toHaveAttribute("open");
+    fireEvent.click(detailsSummary);
+    expect(details).toHaveAttribute("open");
     fireEvent.click(screen.getByRole("tab", { name: "宏观模式" }));
     expect(screen.getByText("劳动市场用持续收入约束职业切换。")).toBeInTheDocument();
   });
