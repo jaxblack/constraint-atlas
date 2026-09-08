@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Background, Controls, Edge, MarkerType, Node, ReactFlow } from "@xyflow/react";
-import { ArrowRight, Clock3, Compass, FlaskConical, History, Map as MapIcon, Play, Sparkles, Trash2 } from "lucide-react";
+import { useEffect, useState, type CSSProperties } from "react";
+import { Background, Controls, Edge, MarkerType, Node, Position, ReactFlow, type ReactFlowInstance } from "@xyflow/react";
+import { ArrowDown, ArrowRight, Clock3, Compass, FlaskConical, History, Layers3, Map as MapIcon, Play, Sparkles, Trash2 } from "lucide-react";
 import "@xyflow/react/dist/style.css";
-import type { Analysis } from "./analysis";
+import { analysisSchema, type Analysis } from "./analysis";
 
 type SavedAnalysis = { id: string; question: string; createdAt: string; analysis: Analysis; source: "model" | "fallback" };
 const STORAGE_KEY = "constraint-atlas-history-v1";
@@ -17,30 +17,87 @@ const demoCases = [
   { category: "创作", title: "稳定工作还是独立创作", focus: "身份需求与时间约束", question: "我想认真做独立创作，现有工作提供稳定收入却消耗了大部分精力。我不想永远把创作当副业，也不能承受长期零收入，下一步该怎么安排？" },
 ];
 
-function flowElements(analysis: Analysis): { nodes: Node[]; edges: Edge[] } {
-  const columns = ["need", "fact", "constraint", "choice", "action"];
-  const counts = new Map<string, number>();
-  const nodes = analysis.nodes.map((item) => {
-    const row = counts.get(item.kind) ?? 0;
-    counts.set(item.kind, row + 1);
-    return {
-      id: item.id,
-      position: { x: columns.indexOf(item.kind) * 220, y: row * 150 + (columns.indexOf(item.kind) % 2) * 34 },
-      data: { label: <div className={`map-node map-node--${item.kind}`}><span>{item.kind}</span><strong>{item.label}</strong><p>{item.detail}</p></div> },
-      style: { width: 190, border: 0, padding: 0, background: "transparent" },
-    };
-  });
+const kindLabels = { need: "需求", fact: "事实", constraint: "约束", choice: "选择", action: "行动" } as const;
+const layerHeight = 176;
+const layerGap = 44;
+const nodeWidth = 214;
+const nodeGap = 22;
+const layerHeaderWidth = 184;
+
+function alignMobileFlow(instance: ReactFlowInstance) {
+  if (typeof window.matchMedia !== "function" || !window.matchMedia("(max-width: 760px)").matches) return;
+  requestAnimationFrame(() => instance.setViewport({ x: 8, y: 10, zoom: 0.68 }));
+}
+
+function flowElements(input: Analysis): { nodes: Node[]; edges: Edge[]; canvasHeight: number; layers: Analysis["layers"] } {
+  const analysis = analysisSchema.parse(input);
+  const incoming = new Map<string, string[]>();
+  for (const edge of analysis.edges) incoming.set(edge.target, [...(incoming.get(edge.target) ?? []), edge.source]);
+  const order = new Map<string, number>();
+  const grouped = new Map(analysis.layers.map((layer) => {
+    const original = analysis.nodes.filter((node) => node.layer === layer.id);
+    const nodes = [...original].sort((left, right) => {
+      const score = (id: string, fallback: number) => {
+        const predecessors = (incoming.get(id) ?? []).map((source) => order.get(source)).filter((value): value is number => value !== undefined);
+        return predecessors.length > 0 ? predecessors.reduce((sum, value) => sum + value, 0) / predecessors.length : 100 + fallback;
+      };
+      return score(left.id, original.indexOf(left)) - score(right.id, original.indexOf(right));
+    });
+    nodes.forEach((node, index) => order.set(node.id, index));
+    return [layer.id, nodes] as const;
+  }));
+  const maxNodes = Math.max(...[...grouped.values()].map((nodes) => nodes.length), 1);
+  const layerWidth = Math.max(920, layerHeaderWidth + 30 + maxNodes * nodeWidth + Math.max(0, maxNodes - 1) * nodeGap + 28);
+  const layerNodes: Node[] = analysis.layers.map((layer, index) => ({
+    id: `layer-${layer.id}`,
+    type: "group",
+    className: "causal-layer",
+    position: { x: 0, y: index * (layerHeight + layerGap) },
+    data: { label: "" },
+    style: { width: layerWidth, height: layerHeight },
+    draggable: false,
+    selectable: false,
+    focusable: false,
+  }));
+  const layerLabelNodes: Node[] = analysis.layers.map((layer, index) => ({
+    id: `layer-label-${layer.id}`,
+    parentId: `layer-${layer.id}`,
+    extent: "parent" as const,
+    className: "causal-layer-label",
+    position: { x: 16, y: 25 },
+    data: { label: <div className="causal-layer-heading"><span>层级</span><strong>{String(index + 1).padStart(2, "0")} · {layer.label}</strong><p>{layer.description}</p></div> },
+    style: { width: 162, border: 0, padding: 0, background: "transparent" },
+    draggable: false,
+    selectable: false,
+    focusable: false,
+  }));
+  const mapNodes: Node[] = analysis.layers.flatMap((layer) => (grouped.get(layer.id) ?? []).map((item, index) => ({
+    id: item.id,
+    parentId: `layer-${layer.id}`,
+    extent: "parent" as const,
+    position: { x: layerHeaderWidth + 24 + index * (nodeWidth + nodeGap), y: 34 },
+    sourcePosition: Position.Bottom,
+    targetPosition: Position.Top,
+    data: { label: <div className={`map-node map-node--${item.kind}`}><span><i />{kindLabels[item.kind]}</span><strong>{item.label}</strong><p>{item.detail}</p></div> },
+    style: { width: nodeWidth, border: 0, padding: 0, background: "transparent" },
+    draggable: false,
+    selectable: false,
+  })));
+  const nodeLayer = new Map(analysis.nodes.map((node) => [node.id, node.layer]));
   const edges = analysis.edges.map((item, index) => ({
     id: `edge-${index}`,
     source: item.source,
     target: item.target,
     label: item.relation,
-    animated: item.target === "action",
+    type: "smoothstep",
     markerEnd: { type: MarkerType.ArrowClosed },
-    style: { stroke: "#697a6f", strokeWidth: 1.5 },
-    labelStyle: { fill: "#526158", fontSize: 11 },
+    style: { stroke: "#64776b", strokeWidth: 1.35, strokeDasharray: nodeLayer.get(item.source) === nodeLayer.get(item.target) ? "4 4" : undefined },
+    labelStyle: { fill: "#46584d", fontSize: 10, fontWeight: 700 },
+    labelBgStyle: { fill: "#f5f5f0", fillOpacity: 0.94 },
+    labelBgPadding: [5, 3] as [number, number],
+    labelBgBorderRadius: 3,
   }));
-  return { nodes, edges };
+  return { nodes: [...layerNodes, ...layerLabelNodes, ...mapNodes], edges, canvasHeight: analysis.layers.length * (layerHeight + layerGap) - layerGap + 36, layers: analysis.layers };
 }
 
 export default function Home() {
@@ -142,7 +199,13 @@ export default function Home() {
                 <span className={`source source--${current.source}`}>{current.source === "model" ? "AI 分析" : "离线分析"}</span>
               </div>
               <div className="conclusion"><MapIcon size={20} /><div><span>地图结论</span><p>{current.analysis.conclusion}</p></div></div>
-              <div className="flow-wrap"><ReactFlow nodes={flow.nodes} edges={flow.edges} fitView minZoom={0.45} maxZoom={1.4} nodesDraggable={false} nodesConnectable={false} proOptions={{ hideAttribution: true }}><Background color="#ccd4ce" gap={24} size={1} /><Controls showInteractive={false} /></ReactFlow></div>
+              <div className="layer-guide">
+                <div><Layers3 size={17} /><strong>{flow.layers.length} 层因果结构</strong><span>类型不等于层级；每层都可能包含需求、事实、约束、选择与行动。</span></div>
+                <div className="kind-legend">{Object.entries(kindLabels).map(([kind, label]) => <span className={`kind-${kind}`} key={kind}><i />{label}</span>)}</div>
+                <div className="causal-direction">底层原因 <ArrowDown size={13} /> 上层行动</div>
+              </div>
+              <ol className="layer-index" aria-label="因果层级索引">{flow.layers.map((layer, index) => <li key={layer.id}><strong>{String(index + 1).padStart(2, "0")} · {layer.label}</strong><span>{layer.description}</span></li>)}</ol>
+              <div className="flow-wrap flow-wrap--layered" style={{ height: flow.canvasHeight, "--mobile-flow-height": `${Math.ceil(flow.canvasHeight * 0.72)}px` } as CSSProperties}><ReactFlow nodes={flow.nodes} edges={flow.edges} fitView fitViewOptions={{ padding: 0.025, minZoom: 0.68, maxZoom: 1 }} onInit={alignMobileFlow} minZoom={0.32} maxZoom={1.15} nodesDraggable={false} nodesConnectable={false} elementsSelectable={false} panOnScroll={false} zoomOnScroll={false}><Background color="#d2d9d3" gap={22} size={1} /><Controls showInteractive={false} /></ReactFlow></div>
             </section>
           ) : (
             <section className="blank-map">
