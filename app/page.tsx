@@ -5,8 +5,8 @@ import { Background, Controls, Edge, Node, ReactFlow, type ReactFlowInstance } f
 import { ArrowDown, ArrowRight, ChevronDown, Clock3, Compass, FlaskConical, History, Layers3, Map as MapIcon, Play, Sparkles, Trash2 } from "lucide-react";
 import "@xyflow/react/dist/style.css";
 import { analysisSchema, facetLabel, type Analysis } from "./analysis";
-import DisableTower3D from "./DisableTower3D";
 import InsightPanels from "./InsightPanels";
+import TenWorlds3D from "./TenWorlds3D";
 
 type SavedAnalysis = { id: string; question: string; createdAt: string; analysis: Analysis; source: "model" | "fallback" };
 const STORAGE_KEY = "constraint-atlas-history-v1";
@@ -221,7 +221,7 @@ export default function Home() {
             <div>
               <p className="eyebrow">从混乱到下一步</p>
               <h1 id="page-title">把困局摊开来看。</h1>
-              <p className="intro">不是替你做决定，而是把需求、事实、约束和选择放在同一张地图上。</p>
+              <p className="intro">把同一个问题投进十重社会世界，区分努力的耗散、跨层的门槛，以及能够形成复利的惯性。</p>
             </div>
             <label htmlFor="question">把你卡住的问题写下来</label>
             <div className="composer">
@@ -255,9 +255,9 @@ export default function Home() {
                 <span className={`source source--${current.source}`}>{current.source === "model" ? "AI 分析" : "离线分析"}</span>
               </div>
               <div className="conclusion"><MapIcon size={20} /><div><span>地图结论</span><p>{current.analysis.conclusion}</p></div></div>
-              <DisableTower3D input={current.analysis} />
+              <TenWorlds3D key={current.id} input={current.analysis} />
               <details className="analysis-details">
-                <summary><span>展开完整归因与二维因果图</span><ChevronDown size={16} /></summary>
+                <summary><span>展开五类约束与二维因果图</span><ChevronDown size={16} /></summary>
                 <div className="analysis-details-body">
                   <InsightPanels input={current.analysis} />
                   <div className="layer-guide">
@@ -273,7 +273,7 @@ export default function Home() {
           ) : (
             <section className="blank-map">
               <div className="contours" aria-hidden="true" />
-              <MapIcon size={30} /><h2>你的地图会在这里展开</h2><p>先描述一个真实、具体、正在消耗你的问题。</p>
+              <MapIcon size={30} /><h2>你的十重世界会在这里展开</h2><p>描述一个真实问题；所在地、身份资格与目标环境会让硬约束更准确。</p>
               <div className="legend"><span><i className="need" />需求</span><span><i className="constraint" />约束</span><span><i className="choice" />选择</span><span><i className="action" />行动</span></div>
             </section>
           )}

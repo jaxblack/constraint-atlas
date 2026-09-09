@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { socialRelations, socialWorlds } from "./socialWorlds";
 
 export const nodeKinds = ["need", "fact", "constraint", "choice", "action"] as const;
 export const disableStates = ["hard", "capability", "resource", "permission", "coordination", "temporary", "none"] as const;
@@ -88,12 +89,24 @@ const theoryAuditSchema = z.object({
   falsifier: z.string().min(1).max(500),
 });
 
+const worldAssessmentSchema = z.object({
+  world: z.number().int().min(1).max(10),
+  relation: z.enum(socialRelations),
+  relevance: z.number().min(0).max(100),
+  viscosity: z.number().min(0).max(100),
+  inertia: z.number().min(0).max(100),
+  bindingConstraintIDs: z.array(z.string().min(1).max(50)).max(3),
+  diagnosis: z.string().min(1).max(180),
+  evidenceNeeded: z.string().min(1).max(140),
+});
+
 const rawAnalysisSchema = z.object({
   title: z.string().min(1).max(80),
   conclusion: z.string().min(1).max(1200),
   disablement: disablementSchema.optional(),
   scales: z.array(scaleSchema).length(3).optional(),
   theoryAudit: theoryAuditSchema.optional(),
+  worldAssessments: z.array(worldAssessmentSchema).max(10).optional(),
   layers: z.array(layerSchema).min(2).max(6).optional(),
   nodes: z.array(z.object({
     id: z.string().min(1).max(40),
@@ -119,6 +132,7 @@ type NodeKind = typeof nodeKinds[number];
 
 export type Analysis = Omit<RawAnalysis, "layers" | "nodes"> & {
   layers: AnalysisLayer[];
+  worldAssessments: Array<z.infer<typeof worldAssessmentSchema>>;
   nodes: Array<Omit<RawAnalysis["nodes"][number], "layer" | "facet" | "contribution" | "confidence" | "disableState" | "intervention"> & {
     layer: number;
     facet: string;
@@ -128,6 +142,29 @@ export type Analysis = Omit<RawAnalysis, "layers" | "nodes"> & {
     intervention: typeof interventions[number];
   }>;
 };
+
+function normalizeWorldAssessments(input: RawAnalysis["worldAssessments"]): Analysis["worldAssessments"] {
+  const supplied = new Map((input ?? []).map((assessment) => [assessment.world, assessment]));
+  const normalized = socialWorlds.map((world) => {
+    const assessment = supplied.get(world.id);
+    const validConstraintIDs = new Set(world.constraints.map((constraint) => constraint.id));
+    const relation = assessment?.relation ?? "unverified";
+    const relevance = Math.round(assessment?.relevance ?? 0);
+    const mayBind = relevance >= 25 && relation !== "remote" && relation !== "unverified";
+    return {
+      world: world.id,
+      relation,
+      relevance,
+      viscosity: Math.round(assessment?.viscosity ?? world.defaultViscosity),
+      inertia: Math.round(assessment?.inertia ?? world.defaultInertia),
+      bindingConstraintIDs: mayBind ? (assessment?.bindingConstraintIDs ?? []).filter((id) => validConstraintIDs.has(id)).slice(0, 2) : [],
+      diagnosis: assessment?.diagnosis ?? "尚未获得足够的地域、身份、资产和组织信息来判断这一重世界如何作用。",
+      evidenceNeeded: assessment?.evidenceNeeded ?? "补充所在地、身份资格、收入资产、组织位置与目标法域。",
+    };
+  });
+  const current = normalized.filter((assessment) => assessment.relation === "current").sort((left, right) => right.relevance - left.relevance)[0];
+  return normalized.map((assessment) => assessment.relation === "current" && assessment.world !== current?.world ? { ...assessment, relation: "upstream" as const } : assessment);
+}
 
 type LayeredAnalysis = Omit<RawAnalysis, "layers" | "nodes"> & {
   layers: Array<z.infer<typeof layerSchema>>;
@@ -257,6 +294,7 @@ export function normalizeAnalysis(analysis: RawAnalysis): Analysis {
   return {
     ...layered,
     layers: fixedWorldLayers.map((layer) => ({ ...layer, facets: layer.facets.map((facet) => ({ ...facet })) })),
+    worldAssessments: normalizeWorldAssessments(analysis.worldAssessments),
     nodes: remappedNodes.map((node, index) => {
       const contribution = contributions[index];
       const layer = layers.get(node.layer)!;
@@ -332,6 +370,9 @@ export const analysisSchema = rawAnalysisSchema.transform(normalizeAnalysis).sup
   if (layerIDs.size !== analysis.layers.length) {
     ctx.addIssue({ code: "custom", message: "layer ids must be unique" });
   }
+  if (analysis.worldAssessments.length !== 10 || new Set(analysis.worldAssessments.map((item) => item.world)).size !== 10) {
+    ctx.addIssue({ code: "custom", message: "all ten social worlds must be present" });
+  }
   for (const edge of analysis.edges) {
     if (!ids.has(edge.source) || !ids.has(edge.target)) {
       ctx.addIssue({ code: "custom", message: "edge references an unknown node" });
@@ -363,6 +404,7 @@ export function buildFallback(question: string): Analysis {
       { id: "macro", diagnosis: "宏观结构可能解释部分限制，但解释力不等于因果成立。", prediction: "有预测力的结构模型应能指出换身份、规则或环境后结果如何变化。", nextStep: "写下一个能推翻当前宏观解释的反例。" },
     ],
     theoryAudit: { function: "navigation", predictivePower: 45, explanation: "当前模型提供了调查方向，但证据不足，暂时只能作为导航假设。", falsifier: "若改变最高归因条件后结果没有改善，就应降低该解释的权重。" },
+    worldAssessments: normalizeWorldAssessments(undefined),
     layers: fixedWorldLayers,
     nodes: [
       { id: "personal", kind: "need", layer: 1, facet: "personal.safety", contribution: 18, confidence: 58, disableState: "temporary", intervention: "experiment", label: "个人安全边界", detail: "先确认健康、稳定、现金流与风险承受中哪个需求不可牺牲。" },

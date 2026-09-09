@@ -80,6 +80,8 @@ describe("analysisSchema", () => {
     expect(result.nodes.find((node) => node.id === "money")?.facet).toBe("organization.resource");
     expect(result.nodes.find((node) => node.id === "route")?.contribution).toBe(0);
     expect(result.nodes.find((node) => node.id === "ask")?.contribution).toBe(0);
+    expect(result.worldAssessments).toHaveLength(10);
+    expect(result.worldAssessments[0]).toEqual(expect.objectContaining({ world: 1, relation: "unverified", viscosity: 92, inertia: 8 }));
   });
 
   it("accepts compact model output without repeating the fixed world catalog", () => {
@@ -100,5 +102,72 @@ describe("analysisSchema", () => {
     expect(result.layers).toHaveLength(5);
     expect(result.nodes.find((node) => node.id === "people")?.layer).toBe(2);
     expect(result.nodes.find((node) => node.id === "people")?.facet).toBe("organization.resource");
+  });
+
+  it("normalizes ten-world assessments and rejects cross-world constraint ids", () => {
+    const result = analysisSchema.parse({
+      title: "迁移约束",
+      conclusion: "跨境制度是主要过滤膜。",
+      worldAssessments: [
+        { world: 8, relation: "barrier", relevance: 90, viscosity: 80, inertia: 20, bindingConstraintIDs: ["w8-status", "w1-cashflow"], diagnosis: "签证决定能否进入目标法域。", evidenceNeeded: "确认签证类别与申请资格。" },
+      ],
+      nodes: [
+        { id: "need", kind: "need", layer: 1, facet: "personal.growth", contribution: 20, label: "迁移需要", detail: "希望进入新环境。" },
+        { id: "visa", kind: "constraint", layer: 4, facet: "state.citizenship", contribution: 80, label: "签证资格", detail: "目标法域需要工作许可。" },
+        { id: "probe", kind: "action", layer: 4, facet: "state.citizenship", label: "核验签证", detail: "查询官方资格。" },
+      ],
+      edges: [
+        { source: "need", target: "visa", relation: "受限于" },
+        { source: "visa", target: "probe", relation: "需要核验" },
+      ],
+    });
+
+    expect(result.worldAssessments).toHaveLength(10);
+    expect(result.worldAssessments[7].bindingConstraintIDs).toEqual(["w8-status"]);
+    expect(result.worldAssessments[7].relation).toBe("barrier");
+  });
+
+  it("keeps only the most relevant current social world", () => {
+    const result = analysisSchema.parse({
+      title: "当前社会位置",
+      conclusion: "当前主要处于熟人网络环境。",
+      worldAssessments: [
+        { world: 1, relation: "current", relevance: 30, viscosity: 80, inertia: 20, bindingConstraintIDs: [], diagnosis: "生计背景仍有作用。", evidenceNeeded: "核验收入。" },
+        { world: 3, relation: "current", relevance: 75, viscosity: 70, inertia: 30, bindingConstraintIDs: ["w3-network"], diagnosis: "熟人网络直接决定机会。", evidenceNeeded: "核验关键关系。" },
+      ],
+      nodes: [
+        { id: "need", kind: "need", layer: 1, contribution: 20, label: "稳定需要", detail: "需要稳定现金流。" },
+        { id: "network", kind: "constraint", layer: 3, contribution: 80, label: "关系门槛", detail: "机会依赖本地网络。" },
+        { id: "probe", kind: "action", layer: 3, label: "核验关系", detail: "确认替代路径。" },
+      ],
+      edges: [
+        { source: "need", target: "network", relation: "受限于" },
+        { source: "network", target: "probe", relation: "需要核验" },
+      ],
+    });
+
+    expect(result.worldAssessments.filter((assessment) => assessment.relation === "current").map((assessment) => assessment.world)).toEqual([3]);
+    expect(result.worldAssessments[0].relation).toBe("upstream");
+  });
+
+  it("does not mark remote low-relevance catalog entries as currently binding", () => {
+    const result = analysisSchema.parse({
+      title: "远端规则",
+      conclusion: "远端规则暂未直接作用。",
+      worldAssessments: [
+        { world: 10, relation: "remote", relevance: 10, viscosity: 20, inertia: 90, bindingConstraintIDs: ["w10-trade", "w10-finance", "w10-system"], diagnosis: "当前没有直接跨境活动。", evidenceNeeded: "确认是否涉及跨境交易。" },
+      ],
+      nodes: [
+        { id: "need", kind: "need", layer: 1, contribution: 20, label: "稳定", detail: "希望保持稳定。" },
+        { id: "fact", kind: "fact", layer: 2, contribution: 80, label: "本地工作", detail: "当前只在本地活动。" },
+        { id: "probe", kind: "action", layer: 2, label: "核验", detail: "确认目标。" },
+      ],
+      edges: [
+        { source: "need", target: "fact", relation: "对应" },
+        { source: "fact", target: "probe", relation: "需要核验" },
+      ],
+    });
+
+    expect(result.worldAssessments[9].bindingConstraintIDs).toEqual([]);
   });
 });

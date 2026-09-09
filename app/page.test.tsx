@@ -25,6 +25,9 @@ describe("Home", () => {
               { id: "macro", diagnosis: "劳动市场用持续收入约束职业切换。", prediction: "有稀缺技能时转换成本下降。", nextStep: "用作品验证稀缺性。" },
             ],
             theoryAudit: { function: "navigation", predictivePower: 72, explanation: "它能推出可验证的求职策略。", falsifier: "若外部岗位验证仍无改善，则模型不足。" },
+            worldAssessments: [
+              { world: 5, relation: "barrier", relevance: 70, viscosity: 78, inertia: 22, bindingConstraintIDs: ["w5-labor"], diagnosis: "高竞争城市的劳动力市场压低转行议价权。", evidenceNeeded: "核验目标岗位候选数量与真实薪资。" },
+            ],
             layers: [
               { id: 1, domain: "personal", label: "个人五层需求", description: "个人需要" },
               { id: 2, domain: "organization", label: "组织与团体", description: "组织机制" },
@@ -69,24 +72,17 @@ describe("Home", () => {
     expect(screen.getByRole("tab", { name: "中观模式" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "宏观模式" })).toBeInTheDocument();
     expect(screen.getByText("导航模型")).toBeInTheDocument();
-    expect(screen.getByLabelText("3D 世界层级归因塔")).toBeInTheDocument();
-    expect(screen.getByText("3D 世界约束塔")).toBeInTheDocument();
-    expect(screen.getByText("首要归因")).toBeInTheDocument();
-    expect(screen.getByText("组织与团体 · 组织资源 70%")).toBeInTheDocument();
-    expect(screen.getByText("OFFICINA · 共同工作")).toBeInTheDocument();
-    expect(screen.getByText("赭石木构")).toBeInTheDocument();
-    expect(screen.getByText("建造、分工与共享资源")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "组织资源70%" }));
-    expect(screen.getByRole("dialog", { name: "组织资源" })).toBeInTheDocument();
-    expect(screen.getByText("制度如何起作用")).toBeInTheDocument();
-    expect(screen.getByText("共享资源形成排队与争抢")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "关闭制度卷宗" }));
-    fireEvent.click(screen.getByRole("button", { name: /04国家制度0%/ }));
-    fireEvent.click(screen.getByRole("button", { name: "法律权利0%" }));
-    expect(screen.getByRole("link", { name: /国家法律法规数据库/ })).toHaveAttribute("href", "https://flk.npc.gov.cn/");
-    fireEvent.click(screen.getByRole("button", { name: "关闭制度卷宗" }));
-    expect(screen.getByText("问题定位")).toBeInTheDocument();
-    const detailsSummary = screen.getByText("展开完整归因与二维因果图");
+    expect(screen.getByLabelText("十重社会世界过滤膜")).toBeInTheDocument();
+    expect(screen.getByText("你在哪一层被阻住")).toBeInTheDocument();
+    expect(screen.getByText("十重世 · 社会雷诺数")).toBeInTheDocument();
+    expect(await screen.findByText("3D 场景不可用")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /理论原文/ })).toHaveAttribute("href", "https://bestcoder.cn/%E5%8D%81%E9%87%8D%E4%B8%96");
+    expect(screen.getAllByText("高竞争城市市场").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText("高竞争城市的劳动力市场压低转行议价权。")).toBeInTheDocument();
+    expect(screen.getAllByText("劳动力竞争")).toHaveLength(2);
+    expect(screen.getByText("当前绑定")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /就业与社会保障政策/ })).toHaveAttribute("href", "https://www.mohrss.gov.cn/xxgk2020/fdzdgknr/zcfg/");
+    const detailsSummary = screen.getByText("展开五类约束与二维因果图");
     const details = detailsSummary.closest("details");
     expect(details).not.toHaveAttribute("open");
     fireEvent.click(detailsSummary);
