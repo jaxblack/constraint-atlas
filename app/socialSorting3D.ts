@@ -26,6 +26,16 @@ export type SocialSortingArchitecture = {
   visibleVectors: number;
   visibleCrosses: number;
   feedbackLoops: number;
+  connections: FlowConnection[];
+};
+
+export type FlowKind = "forward" | "rejected" | "resource" | "feedback";
+
+export type FlowConnection = {
+  world: number;
+  kind: FlowKind;
+  objects: THREE.Object3D[];
+  baseOpacity: number;
 };
 
 const fract = (value: number) => value - Math.floor(value);
@@ -48,6 +58,26 @@ function lineSegments(points: THREE.Vector3[], color: number, opacity: number): 
   );
 }
 
+function curveConnection(group: THREE.Group, curve: THREE.CatmullRomCurve3, world: number, kind: FlowKind, color: number, opacity: number, dashed = false): FlowConnection {
+  const material = dashed
+    ? new THREE.LineDashedMaterial({ color, transparent: true, opacity, dashSize: .12, gapSize: .09, depthWrite: false })
+    : new THREE.LineBasicMaterial({ color, transparent: true, opacity, depthWrite: false });
+  const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(curve.getPoints(32)), material);
+  if (dashed) line.computeLineDistances();
+  const marker = new THREE.Mesh(
+    new THREE.ConeGeometry(.065, .19, 10),
+    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: Math.min(1, opacity * 1.8), depthWrite: false }),
+  );
+  const point = curve.getPointAt(.72);
+  const tangent = curve.getTangentAt(.72).normalize();
+  marker.position.copy(point);
+  marker.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), tangent);
+  line.userData = { worldID: world, flowKind: kind };
+  marker.userData = { worldID: world, flowKind: kind };
+  group.add(line, marker);
+  return { world, kind, objects: [line, marker], baseOpacity: opacity };
+}
+
 function buildFunnelEnvelope(group: THREE.Group, worlds: TenWorldsModel): void {
   for (let meridian = 0; meridian < 20; meridian++) {
     const angle = meridian * Math.PI * 2 / 20;
@@ -64,7 +94,8 @@ function buildFunnelEnvelope(group: THREE.Group, worlds: TenWorldsModel): void {
   }
 }
 
-function buildFeedbackLoops(group: THREE.Group, worlds: TenWorldsModel, sorting: SocialSortingModel): number {
+function buildFeedbackLoops(group: THREE.Group, worlds: TenWorldsModel, sorting: SocialSortingModel): FlowConnection[] {
+  const connections: FlowConnection[] = [];
   for (let index = 0; index < worlds.layers.length; index++) {
     const world = worlds.layers[index];
     const side = index % 2 === 0 ? 1 : -1;
@@ -76,19 +107,16 @@ function buildFeedbackLoops(group: THREE.Group, worlds: TenWorldsModel, sorting:
       new THREE.Vector3(side * (world.radius + 1.35), world.y - .36, 1.1 - index * .06),
       featurePosition(world, targetFeature, -.18),
     ], false, "centripetal");
-    const feedback = new THREE.Line(
-      new THREE.BufferGeometry().setFromPoints(curve.getPoints(28)),
-      new THREE.LineDashedMaterial({ color: 0x7f5d43, transparent: true, opacity: .2, dashSize: .12, gapSize: .09, depthWrite: false }),
-    );
-    feedback.computeLineDistances();
-    feedback.userData = { feedbackWorld: world.id, feedbackAdjustment: sorting.stages[index].feedbackAdjustment };
-    group.add(feedback);
+    const connection = curveConnection(group, curve, world.id, "feedback", 0x7f5d43, .2, true);
+    connection.objects.forEach((object) => { object.userData.feedbackAdjustment = sorting.stages[index].feedbackAdjustment; });
+    connections.push(connection);
   }
-  return worlds.layers.length;
+  return connections;
 }
 
-function buildNeuralCrosses(group: THREE.Group, worlds: TenWorldsModel, sorting: SocialSortingModel): { nodes: THREE.Mesh[]; crosses: number } {
+function buildNeuralCrosses(group: THREE.Group, worlds: TenWorldsModel, sorting: SocialSortingModel): { nodes: THREE.Mesh[]; crosses: number; connections: FlowConnection[] } {
   const nodes: THREE.Mesh[] = [];
+  const connections: FlowConnection[] = [];
   let crosses = 0;
   worlds.layers.forEach((world, worldIndex) => {
     const active = new Set(sorting.stages[worldIndex].activeFeatures);
@@ -117,9 +145,41 @@ function buildNeuralCrosses(group: THREE.Group, worlds: TenWorldsModel, sorting:
         crosses += 1;
       });
     });
-    group.add(lineSegments(points, world.color, .12 + sorting.stages[worldIndex].threshold / 900));
+    const opacity = .12 + sorting.stages[worldIndex].threshold / 900;
+    const crossing = lineSegments(points, world.color, opacity);
+    crossing.userData = { worldID: world.id, flowKind: "forward" };
+    group.add(crossing);
+    connections.push({ world: world.id, kind: "forward", objects: [crossing], baseOpacity: opacity });
+    const forwardCurve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(0, previous.y + .25, 0),
+      new THREE.Vector3(-.22 + worldIndex % 2 * .44, (previous.y + world.y) / 2, .18),
+      new THREE.Vector3(0, world.y - .2, 0),
+    ], false, "centripetal");
+    connections.push(curveConnection(group, forwardCurve, world.id, "forward", 0x5f7f84, .42));
   });
-  return { nodes, crosses };
+  return { nodes, crosses, connections };
+}
+
+function buildOutcomeConnections(group: THREE.Group, worlds: TenWorldsModel): FlowConnection[] {
+  const top = worlds.layers.at(-1)!.y + 1.6;
+  return worlds.layers.flatMap((world, index) => {
+    const angle = index * 2.39996 + world.id * .43;
+    const rejectedCurve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(Math.cos(angle) * world.radius * .62, world.y, Math.sin(angle) * world.radius * .62),
+      new THREE.Vector3(Math.cos(angle) * world.radius, world.y - .08, Math.sin(angle) * world.radius),
+      new THREE.Vector3(Math.cos(angle) * (world.radius + 1.35), world.y - .4, Math.sin(angle) * (world.radius + 1.35)),
+    ], false, "centripetal");
+    const resourceCurve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(Math.cos(angle) * (world.radius + .62), world.y - .12, Math.sin(angle) * (world.radius + .62)),
+      new THREE.Vector3(Math.cos(angle) * world.radius * .35, world.y + .25, Math.sin(angle) * world.radius * .35),
+      new THREE.Vector3(0, world.y + .72, 0),
+      new THREE.Vector3(0, top, 0),
+    ], false, "centripetal");
+    return [
+      curveConnection(group, rejectedCurve, world.id, "rejected", 0xa25f43, .3),
+      curveConnection(group, resourceCurve, world.id, "resource", 0xd09a3f, .28),
+    ];
+  });
 }
 
 function buildVectorTraces(group: THREE.Group, worlds: TenWorldsModel, sorting: SocialSortingModel): VectorTrace[] {
@@ -226,12 +286,40 @@ export function buildSocialSortingArchitecture(scene: THREE.Scene, worlds: TenWo
   group.name = "social-sorting-network";
   scene.add(group);
   buildFunnelEnvelope(group, worlds);
-  const feedbackLoops = buildFeedbackLoops(group, worlds, sorting);
+  const feedbackConnections = buildFeedbackLoops(group, worlds, sorting);
   const neural = buildNeuralCrosses(group, worlds, sorting);
+  const outcomeConnections = buildOutcomeConnections(group, worlds);
   const traces = buildVectorTraces(group, worlds, sorting);
   const evaporationFields = buildEvaporation(group, worlds, sorting);
   const resourcePackets = buildResourceUpflow(group, worlds, sorting);
-  return { group, traces, resourcePackets, neuralNodes: neural.nodes, evaporationFields, visibleVectors: traces.length, visibleCrosses: neural.crosses, feedbackLoops };
+  const connections = [...neural.connections, ...outcomeConnections, ...feedbackConnections];
+  return { group, traces, resourcePackets, neuralNodes: neural.nodes, evaporationFields, visibleVectors: traces.length, visibleCrosses: neural.crosses, feedbackLoops: feedbackConnections.length, connections };
+}
+
+function setObjectOpacity(object: THREE.Object3D, opacity: number): void {
+  const renderable = object as THREE.Mesh;
+  const materials = Array.isArray(renderable.material) ? renderable.material : renderable.material ? [renderable.material] : [];
+  materials.forEach((material) => {
+    material.transparent = true;
+    material.opacity = Math.min(1, opacity);
+  });
+}
+
+export function applySocialSortingFocus(architecture: SocialSortingArchitecture, selectedWorldID: number): number {
+  let focusedConnections = 0;
+  architecture.connections.forEach((connection) => {
+    const active = connection.world === selectedWorldID;
+    if (active) focusedConnections += 1;
+    connection.objects.forEach((object) => setObjectOpacity(object, connection.baseOpacity * (active ? 2.7 : .24)));
+  });
+  architecture.neuralNodes.forEach((node) => {
+    const active = node.userData.worldID === selectedWorldID;
+    node.userData.focused = active;
+    setObjectOpacity(node, node.userData.active ? (active ? 1 : .16) : (active ? .42 : .08));
+    node.scale.setScalar(active ? 1.45 : .72);
+  });
+  architecture.evaporationFields.forEach((field, index) => setObjectOpacity(field, index + 1 === selectedWorldID ? .48 : .07));
+  return focusedConnections;
 }
 
 export function animateSocialSorting(architecture: SocialSortingArchitecture, now: number): void {
@@ -252,7 +340,7 @@ export function animateSocialSorting(architecture: SocialSortingArchitecture, no
   });
   architecture.neuralNodes.forEach((node, index) => {
     const pulse = node.userData.active ? 1 + Math.sin(now * .003 + index) * .14 : 1;
-    node.scale.setScalar(pulse);
+    node.scale.setScalar((node.userData.focused ? 1.45 : .72) * pulse);
   });
   architecture.evaporationFields.forEach((field, index) => {
     field.rotation.y = now * Number(field.userData.drift) * (index % 2 ? -1 : 1);
