@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useEffectEvent, useMemo, useRef, useState, type CSSProperties } from "react";
-import { ArrowUp, Binary, ExternalLink, Filter, Gauge, Landmark, Network, Pause, Play, RotateCcw, ScanSearch, Type, ZoomIn, ZoomOut } from "lucide-react";
+import { ArrowUp, Binary, ExternalLink, Filter, Gauge, Landmark, Maximize2, Minimize2, Network, Pause, Play, RotateCcw, ScanSearch, Type, ZoomIn, ZoomOut } from "lucide-react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { CSS2DObject, CSS2DRenderer } from "three/examples/jsm/renderers/CSS2DRenderer.js";
@@ -258,6 +258,7 @@ function buildMechanicalDrawing(parent: THREE.Group, layer: TenWorldLayer): THRE
 }
 
 export default function TenWorlds3D({ input }: { input: Analysis }) {
+  const sectionRef = useRef<HTMLElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const visualRef = useRef(new Map<number, MembraneVisual>());
   const controlsRef = useRef<OrbitControls | null>(null);
@@ -279,6 +280,8 @@ export default function TenWorlds3D({ input }: { input: Analysis }) {
   const [fontPercent, setFontPercent] = useState(100);
   const [rotationEnabled, setRotationEnabled] = useState(true);
   const [motionReduced, setMotionReduced] = useState(false);
+  const [fullscreenSupported, setFullscreenSupported] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const selectedConstraint = selected.constraints.find((constraint) => constraint.id === selectedConstraintID) ?? defaultConstraint;
   const selectedStage = sorting.stages[selected.id - 1];
 
@@ -328,6 +331,30 @@ export default function TenWorlds3D({ input }: { input: Analysis }) {
     if (controlsRef.current) controlsRef.current.autoRotate = nextRotation;
     if (canvasRef.current) canvasRef.current.dataset.autoRotate = String(nextRotation);
   };
+
+  const toggleFullscreen = async () => {
+    const section = sectionRef.current;
+    if (!section || !fullscreenSupported) return;
+    try {
+      if (document.fullscreenElement === section) await document.exitFullscreen();
+      else await section.requestFullscreen();
+    } catch {
+      setIsFullscreen(document.fullscreenElement === section);
+    }
+  };
+
+  useEffect(() => {
+    const updateFullscreen = () => setIsFullscreen(document.fullscreenElement === sectionRef.current);
+    const timer = window.setTimeout(() => {
+      setFullscreenSupported(Boolean(document.fullscreenEnabled && sectionRef.current?.requestFullscreen && document.exitFullscreen));
+      updateFullscreen();
+    }, 0);
+    document.addEventListener("fullscreenchange", updateFullscreen);
+    return () => {
+      window.clearTimeout(timer);
+      document.removeEventListener("fullscreenchange", updateFullscreen);
+    };
+  }, []);
 
   useEffect(() => {
     applyVisualState(visualRef.current, selectedWorldID, selectedConstraintID, hoveredWorldID, hoveredConstraintID);
@@ -514,6 +541,12 @@ export default function TenWorlds3D({ input }: { input: Analysis }) {
     };
     const observer = new ResizeObserver(resize);
     observer.observe(canvas);
+    let fullscreenResizeFrame = 0;
+    const resizeAfterFullscreen = () => {
+      cancelAnimationFrame(fullscreenResizeFrame);
+      fullscreenResizeFrame = requestAnimationFrame(resize);
+    };
+    document.addEventListener("fullscreenchange", resizeAfterFullscreen);
     resize();
     canvas.dataset.worldCount = "10";
     canvas.dataset.mechanismCount = String(new Set(model.layers.map((layer) => layer.instrument.geometry)).size);
@@ -550,6 +583,8 @@ export default function TenWorlds3D({ input }: { input: Analysis }) {
       cancelAnimationFrame(frame);
       window.clearTimeout(motionStateTimer);
       observer.disconnect();
+      cancelAnimationFrame(fullscreenResizeFrame);
+      document.removeEventListener("fullscreenchange", resizeAfterFullscreen);
       canvas.removeEventListener("pointerdown", onPointerDown);
       canvas.removeEventListener("pointermove", onPointerMove);
       canvas.removeEventListener("pointerleave", onPointerLeave);
@@ -599,7 +634,7 @@ export default function TenWorlds3D({ input }: { input: Analysis }) {
     "--graph-font-20": `${20 * fontScale}px`,
     "--graph-font-27": `${27 * fontScale}px`,
   } as CSSProperties;
-  return <section className="ten-worlds" aria-labelledby="ten-worlds-title" style={graphStyle}>
+  return <section ref={sectionRef} className="ten-worlds" aria-labelledby="ten-worlds-title" style={graphStyle}>
     <canvas ref={canvasRef} aria-label="十重社会世界过滤膜" />
     {unsupported && <div className="ten-world-unsupported" role="status"><Filter size={21} /><strong>3D 场景不可用</strong><span>仍可通过十重世界索引查看每层过滤膜与硬约束。</span></div>}
     <header className="ten-worlds-heading"><div><Filter size={17} /><div><p>SOCIAL SORTING NETWORK · 十重世</p><h3 id="ten-worlds-title">社会如何计算并分流你</h3></div></div><a href="https://bestcoder.cn/%E5%8D%81%E9%87%8D%E4%B8%96" target="_blank" rel="noreferrer">理论原文<ExternalLink size={10} /></a></header>
@@ -610,6 +645,7 @@ export default function TenWorlds3D({ input }: { input: Analysis }) {
       <div><button type="button" aria-label="缩小图谱" title="缩小" onClick={() => applyZoom(zoomPercent - 10)}><ZoomOut size={15} /></button><input type="range" min="70" max="160" step="5" value={zoomPercent} onChange={(event) => applyZoom(Number(event.target.value))} aria-label="图谱缩放" /><button type="button" aria-label="放大图谱" title="放大" onClick={() => applyZoom(zoomPercent + 10)}><ZoomIn size={15} /></button></div>
       <button type="button" aria-label="自动旋转图谱" aria-pressed={rotationEnabled} title={motionReduced ? "系统已减少动画" : rotationEnabled ? "暂停自动旋转" : "开始自动旋转"} onClick={toggleRotation}>{rotationEnabled ? <Pause size={15} /> : <Play size={15} />}</button>
       <button type="button" aria-label="复位图谱视角" title="复位视角" onClick={resetGraph}><RotateCcw size={15} /></button>
+      <button type="button" aria-label={isFullscreen ? "退出全屏图谱" : "全屏图谱"} aria-pressed={isFullscreen} title={fullscreenSupported ? isFullscreen ? "退出全屏" : "全屏" : "浏览器不支持全屏"} disabled={!fullscreenSupported} onClick={toggleFullscreen}>{isFullscreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}</button>
       <div><Type size={14} aria-hidden="true" /><input type="range" min="85" max="140" step="5" value={fontPercent} onChange={(event) => setFontPercent(Number(event.target.value))} aria-label="字体大小" /></div>
     </div>
     <nav className="ten-worlds-nav" aria-label="十重社会世界">{model.layers.map((layer) => <button aria-pressed={layer.id === selected.id} className={layer.id === selected.id ? "is-active" : ""} style={{ "--world-color": `#${layer.color.toString(16).padStart(6, "0")}` } as CSSProperties} onClick={() => selectWorld(layer.id)} key={layer.id}><span>{String(layer.id).padStart(2, "0")}</span><div><strong>{layer.label}</strong><em>{layer.instrument.title}</em></div><b>{layer.relevance}</b></button>)}</nav>

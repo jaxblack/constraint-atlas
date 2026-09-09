@@ -84,6 +84,7 @@ describe("Home", () => {
     expect(screen.getByRole("slider", { name: "图谱缩放" })).toHaveValue("100");
     expect(screen.getByRole("slider", { name: "字体大小" })).toHaveValue("100");
     expect(screen.getByRole("button", { name: "自动旋转图谱" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "全屏图谱" })).toBeDisabled();
     fireEvent.change(screen.getByRole("slider", { name: "字体大小" }), { target: { value: "130" } });
     expect(container.querySelector(".ten-worlds")).toHaveStyle({ "--graph-font-scale": "1.3" });
     fireEvent.change(screen.getByRole("slider", { name: "图谱缩放" }), { target: { value: "140" } });
