@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useEffectEvent, useMemo, useRef, useState, type CSSProperties } from "react";
-import { ArrowUp, ExternalLink, Filter, Gauge, Landmark, ScanSearch } from "lucide-react";
+import { ArrowUp, Binary, ExternalLink, Filter, Gauge, Landmark, Network, ScanSearch } from "lucide-react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { CSS2DObject, CSS2DRenderer } from "three/examples/jsm/renderers/CSS2DRenderer.js";
 import type { Analysis } from "./analysis";
+import { animateSocialSorting, buildSocialSortingArchitecture } from "./socialSorting3D";
+import { buildSocialSortingModel, socialFeatureAxes } from "./socialSortingModel";
 import { buildTenWorldsModel, type TenWorldLayer } from "./tenWorldsModel";
 import type { ConstraintHardness, SocialRelation } from "./socialWorlds";
 
@@ -236,6 +238,7 @@ export default function TenWorlds3D({ input }: { input: Analysis }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const visualRef = useRef(new Map<number, MembraneVisual>());
   const model = useMemo(() => buildTenWorldsModel(input), [input]);
+  const sorting = useMemo(() => buildSocialSortingModel(input), [input]);
   const [selectedWorldID, setSelectedWorldID] = useState(model.primaryWorldID);
   const selected = model.layers.find((layer) => layer.id === selectedWorldID) ?? model.layers[0];
   const defaultConstraint = selected.constraints.find((constraint) => constraint.binding) ?? selected.constraints[0];
@@ -244,6 +247,7 @@ export default function TenWorlds3D({ input }: { input: Analysis }) {
   const [hoveredConstraintID, setHoveredConstraintID] = useState<string>();
   const [unsupported, setUnsupported] = useState(false);
   const selectedConstraint = selected.constraints.find((constraint) => constraint.id === selectedConstraintID) ?? defaultConstraint;
+  const selectedStage = sorting.stages[selected.id - 1];
 
   const selectWorld = (worldID: number) => {
     const world = model.layers.find((layer) => layer.id === worldID);
@@ -277,7 +281,7 @@ export default function TenWorlds3D({ input }: { input: Analysis }) {
     scene.background = new THREE.Color(0xf2eee1);
     scene.fog = new THREE.Fog(0xf2eee1, 19, 36);
     const camera = new THREE.PerspectiveCamera(34, 1, .1, 100);
-    camera.position.set(13.1, 8.3, 16.1);
+    camera.position.set(14.3, 8.9, 17.4);
     camera.lookAt(0, .45, 0);
     renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -297,7 +301,6 @@ export default function TenWorlds3D({ input }: { input: Analysis }) {
     const clickable: THREE.Object3D[] = [];
     const visuals = new Map<number, MembraneVisual>();
     const mechanisms: THREE.Group[] = [];
-    const particles: THREE.Mesh[] = [];
     for (const layer of model.layers) {
       const mechanism = new THREE.Group();
       mechanism.position.y = layer.y;
@@ -354,20 +357,16 @@ export default function TenWorlds3D({ input }: { input: Analysis }) {
     const shaftPoints = [new THREE.Vector3(0, model.layers[0].y - .22, 0), new THREE.Vector3(0, model.layers.at(-1)!.y + .72, 0)];
     scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(shaftPoints), new THREE.LineBasicMaterial({ color: 0x9b682d, transparent: true, opacity: .68 })));
     scene.add(new THREE.ArrowHelper(new THREE.Vector3(0, 1, 0), shaftPoints[1].clone().add(new THREE.Vector3(0, -.42, 0)), .58, 0xb67b32, .18, .1));
-    for (let index = 0; index < 8; index++) {
-      const particle = new THREE.Mesh(new THREE.SphereGeometry(.035 + index % 2 * .018, 12, 8), new THREE.MeshBasicMaterial({ color: 0xc69243, transparent: true, opacity: .76 }));
-      particle.userData.offset = index / 8;
-      scene.add(particle);
-      particles.push(particle);
-    }
+    const sortingArchitecture = buildSocialSortingArchitecture(scene, model, sorting);
 
     const controls = new OrbitControls(camera, canvas);
     controls.target.set(0, 0, 0);
-    controls.enableDamping = true;
+    const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    controls.enableDamping = !reduceMotion;
     controls.enablePan = false;
     controls.minDistance = 11;
     controls.maxDistance = 27;
-    controls.autoRotate = !matchMedia("(prefers-reduced-motion: reduce)").matches;
+    controls.autoRotate = !reduceMotion;
     controls.autoRotateSpeed = .14;
 
     const raycaster = new THREE.Raycaster();
@@ -418,17 +417,23 @@ export default function TenWorlds3D({ input }: { input: Analysis }) {
     canvas.dataset.worldCount = "10";
     canvas.dataset.mechanismCount = String(new Set(model.layers.map((layer) => layer.instrument.geometry)).size);
     canvas.dataset.constraintCount = String(model.layers.reduce((sum, layer) => sum + layer.constraints.length, 0));
+    canvas.dataset.vectorCount = String(sorting.vectorCount);
+    canvas.dataset.visibleVectorCount = String(sortingArchitecture.visibleVectors);
+    canvas.dataset.crossCount = String(sorting.crossCount);
+    canvas.dataset.visibleCrossCount = String(sortingArchitecture.visibleCrosses);
+    canvas.dataset.filteredCount = String(sorting.totalFiltered);
+    canvas.dataset.resourceUpflow = String(sorting.resourceUpflow);
+      canvas.dataset.feedbackCount = String(sortingArchitecture.feedbackLoops);
+    canvas.dataset.reducedMotion = String(reduceMotion);
+    animateSocialSorting(sortingArchitecture, 0);
     let frame = 0;
     const animate = (now: number) => {
       frame = requestAnimationFrame(animate);
       controls.update();
-      mechanisms.forEach((mechanism) => { mechanism.rotation.y += Number(mechanism.userData.rotationSpeed); });
-      const bottom = model.layers[0].y;
-      const range = model.layers.at(-1)!.y - bottom + .55;
-      particles.forEach((particle) => {
-        const progress = (now * .000055 + Number(particle.userData.offset)) % 1;
-        particle.position.set(Math.sin(progress * Math.PI * 4) * .05, bottom + progress * range, Math.cos(progress * Math.PI * 4) * .05);
-      });
+      if (!reduceMotion) {
+        mechanisms.forEach((mechanism) => { mechanism.rotation.y += Number(mechanism.userData.rotationSpeed); });
+        animateSocialSorting(sortingArchitecture, now);
+      }
       renderer.render(scene, camera);
       labelRenderer.render(scene, camera);
       canvas.dataset.threeReady = "true";
@@ -448,20 +453,31 @@ export default function TenWorlds3D({ input }: { input: Analysis }) {
       labelRenderer.domElement.remove();
       renderer.dispose();
       delete canvas.dataset.mechanismCount;
+      delete canvas.dataset.vectorCount;
+      delete canvas.dataset.visibleVectorCount;
+      delete canvas.dataset.crossCount;
+      delete canvas.dataset.visibleCrossCount;
+      delete canvas.dataset.filteredCount;
+      delete canvas.dataset.resourceUpflow;
+      delete canvas.dataset.feedbackCount;
+      delete canvas.dataset.reducedMotion;
     };
-  }, [model]);
+  }, [model, sorting]);
 
   const relation = relationLabels[selected.relation];
   return <section className="ten-worlds" aria-labelledby="ten-worlds-title">
     <canvas ref={canvasRef} aria-label="十重社会世界过滤膜" />
     {unsupported && <div className="ten-world-unsupported" role="status"><Filter size={21} /><strong>3D 场景不可用</strong><span>仍可通过十重世界索引查看每层过滤膜与硬约束。</span></div>}
-    <header className="ten-worlds-heading"><div><Filter size={17} /><div><p>MACHINA SOCIETATIS · 十重世</p><h3 id="ten-worlds-title">你在哪一层被阻住</h3></div></div><a href="https://bestcoder.cn/%E5%8D%81%E9%87%8D%E4%B8%96" target="_blank" rel="noreferrer">理论原文<ExternalLink size={10} /></a></header>
-    <div className="ten-worlds-target"><ArrowUp size={14} /><span>试图推动</span><strong>{model.target}</strong></div>
+    <header className="ten-worlds-heading"><div><Filter size={17} /><div><p>SOCIAL SORTING NETWORK · 十重世</p><h3 id="ten-worlds-title">社会如何计算并分流你</h3></div></div><a href="https://bestcoder.cn/%E5%8D%81%E9%87%8D%E4%B8%96" target="_blank" rel="noreferrer">理论原文<ExternalLink size={10} /></a></header>
+    <div className="ten-worlds-target"><ArrowUp size={14} /><span>输入意图</span><strong>{model.target}</strong></div>
+    <div className="social-algorithm-overview" aria-label="社会筛选算法概览"><span><b>{sorting.vectorCount} × {sorting.dimensions}</b>模拟人物向量</span><span><b>{sorting.crossCount}</b>累计 feature 评估</span><span><b>{sorting.totalFiltered}</b>模拟过滤量</span><span><b>{sorting.resourceUpflow}</b>资源上行指数</span><span className="is-feedback"><b>{sorting.feedbackCount} 条反馈回路</b>概念模拟，非人口统计或个体预测</span></div>
+    <div className="social-flow-key" aria-label="流动图例"><span className="is-vector">人物向量</span><span className="is-filtered">未过阈值 / 蒸发</span><span className="is-resource">利益资源向上汇聚</span></div>
     <nav className="ten-worlds-nav" aria-label="十重社会世界">{model.layers.map((layer) => <button aria-pressed={layer.id === selected.id} className={layer.id === selected.id ? "is-active" : ""} style={{ "--world-color": `#${layer.color.toString(16).padStart(6, "0")}` } as CSSProperties} onClick={() => selectWorld(layer.id)} key={layer.id}><span>{String(layer.id).padStart(2, "0")}</span><div><strong>{layer.label}</strong><em>{layer.instrument.title}</em></div><b>{layer.relevance}</b></button>)}</nav>
     <aside className="ten-world-detail" style={{ "--world-color": `#${selected.color.toString(16).padStart(6, "0")}` } as CSSProperties}>
       <header><span>FOLIO {String(selected.id).padStart(2, "0")}</span><strong>{selected.instrument.latin}</strong><b>{relation} · {selected.relevance}</b></header>
       <h4>{selected.label}</h4><p className="ten-world-instrument">{selected.instrument.title}</p><p className="ten-world-prototype">文章原型：{selected.prototype}</p>
       <p className="ten-world-diagnosis">{selected.diagnosis}</p>
+      <section className="sorting-stage-readout" aria-label={`第${selected.id}重筛选计算`}><header><Network size={14} /><strong>SELECTION KERNEL</strong><span>阈值 {selectedStage.threshold} · 前轮反馈 +{selectedStage.feedbackAdjustment}</span></header><div><span><b>{selectedStage.input}</b>输入</span><span><b>{selectedStage.passed}</b>通过</span><span><b>{selectedStage.filtered}</b>过滤</span><span><b>{selectedStage.evaporated}</b>蒸发</span><span><b>+{selectedStage.resourceYield}</b>资源指数</span></div><footer><Binary size={13} />{selectedStage.activeFeatures.map((featureID) => { const feature = socialFeatureAxes.find((item) => item.id === featureID)!; return <span style={{ "--feature-color": `#${feature.color.toString(16).padStart(6, "0")}` } as CSSProperties} key={feature.id}>{feature.label}</span>; })}</footer></section>
       <div className="reynolds-meters"><div><span>环境黏性</span><b>{selected.viscosity}</b><i><em style={{ width: `${selected.viscosity}%` }} /></i></div><div><span>积累惯性</span><b>{selected.inertia}</b><i><em style={{ width: `${selected.inertia}%` }} /></i></div></div>
       <div className="hard-constraint-list"><header><Landmark size={13} /><span>本层硬约束</span></header>{selected.constraints.map((constraint) => <button aria-pressed={constraint.id === selectedConstraint.id} className={`${constraint.id === selectedConstraint.id ? "is-active" : ""} ${constraint.binding ? "is-binding" : ""}`} onClick={() => setSelectedConstraintID(constraint.id)} key={constraint.id}><span>{hardnessLabels[constraint.hardness]}</span><strong>{constraint.label}</strong>{constraint.binding && <b>当前绑定</b>}</button>)}</div>
       <div className="constraint-reading"><header><ScanSearch size={13} /><strong>{selectedConstraint.label}</strong><span>{hardnessLabels[selectedConstraint.hardness]}</span></header><p>{selectedConstraint.description}</p>{selectedConstraint.sources.length > 0 && <div>{selectedConstraint.sources.map((source) => <a href={source.url} target="_blank" rel="noreferrer" key={source.id}>{source.authority} · {source.title}<ExternalLink size={11} /></a>)}</div>}</div>

@@ -73,8 +73,12 @@ describe("Home", () => {
     expect(screen.getByRole("tab", { name: "宏观模式" })).toBeInTheDocument();
     expect(screen.getByText("导航模型")).toBeInTheDocument();
     expect(screen.getByLabelText("十重社会世界过滤膜")).toBeInTheDocument();
-    expect(screen.getByText("你在哪一层被阻住")).toBeInTheDocument();
-    expect(screen.getByText("MACHINA SOCIETATIS · 十重世")).toBeInTheDocument();
+    expect(screen.getByText("社会如何计算并分流你")).toBeInTheDocument();
+    expect(screen.getByText("SOCIAL SORTING NETWORK · 十重世")).toBeInTheDocument();
+    expect(screen.getByLabelText("社会筛选算法概览")).toHaveTextContent("人物向量");
+    expect(screen.getByText("SELECTION KERNEL")).toBeInTheDocument();
+    expect(screen.getByText("累计 feature 评估")).toBeInTheDocument();
+    expect(screen.getByText("概念模拟，非人口统计或个体预测")).toBeInTheDocument();
     expect(screen.getAllByText("市场齿轮").length).toBeGreaterThan(0);
     expect(await screen.findByText("3D 场景不可用")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /理论原文/ })).toHaveAttribute("href", "https://bestcoder.cn/%E5%8D%81%E9%87%8D%E4%B8%96");

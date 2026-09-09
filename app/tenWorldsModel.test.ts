@@ -10,6 +10,7 @@ describe("buildTenWorldsModel", () => {
     expect(model.layers.map((layer) => layer.id)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
     expect(model.layers.every((layer, index) => index === 0 || layer.y > model.layers[index - 1].y)).toBe(true);
     expect(model.layers.every((layer) => layer.constraints.length >= 3)).toBe(true);
+    expect(model.layers[0].radius).toBeGreaterThan(model.layers.at(-1)!.radius);
     expect(new Set(model.layers.map((layer) => layer.instrument.geometry)).size).toBe(10);
     expect(model.layers.map((layer) => layer.instrument.title)).toEqual([
       "生存筛盘", "公共水脉", "熟人结网", "单轴配给器", "市场齿轮",

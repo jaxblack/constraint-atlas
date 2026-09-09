@@ -46,7 +46,7 @@ const instruments: TenWorldLayer["instrument"][] = [
 export function buildTenWorldsModel(input: Analysis): TenWorldsModel {
   const analysis = analysisSchema.parse(input);
   const assessments = new Map(analysis.worldAssessments.map((assessment) => [assessment.world, assessment]));
-  const verticalGap = 1.08;
+  const verticalGap = 1.12;
   const centerOffset = (socialWorlds.length - 1) * verticalGap / 2;
   const layers = socialWorlds.map((world, index) => {
     const assessment = assessments.get(world.id)!;
@@ -71,7 +71,7 @@ export function buildTenWorldsModel(input: Analysis): TenWorldsModel {
         }),
       })),
       y: index * verticalGap - centerOffset,
-      radius: 2.65 + index * .1,
+      radius: 3.72 - index * .18,
       color: palette[index],
       instrument: instruments[index],
     };
