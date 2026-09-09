@@ -16,6 +16,11 @@ export type TenWorldLayer = {
   y: number;
   radius: number;
   color: number;
+  instrument: {
+    latin: string;
+    title: string;
+    geometry: "sieve" | "aqueduct" | "network" | "monopoly" | "market" | "gate" | "vault" | "astrolabe" | "cage" | "armillary";
+  };
 };
 
 export type TenWorldsModel = {
@@ -25,6 +30,18 @@ export type TenWorldsModel = {
 };
 
 const palette = [0x854c37, 0x8f5f3e, 0x927047, 0x8b7e53, 0x748268, 0x5f8078, 0x527882, 0x496d82, 0x456276, 0x3f5869];
+const instruments: TenWorldLayer["instrument"][] = [
+  { latin: "CRIBRUM VITAE", title: "生存筛盘", geometry: "sieve" },
+  { latin: "AQUA PUBLICA", title: "公共水脉", geometry: "aqueduct" },
+  { latin: "NODUS FAMILIAE", title: "熟人结网", geometry: "network" },
+  { latin: "AXIS UNICUS", title: "单轴配给器", geometry: "monopoly" },
+  { latin: "ROTA MERCATI", title: "市场齿轮", geometry: "market" },
+  { latin: "PORTA CIVITATIS", title: "制度门机", geometry: "gate" },
+  { latin: "CAMERA RERUM", title: "资产密室", geometry: "vault" },
+  { latin: "ASTROLABIUM", title: "跨境星盘", geometry: "astrolabe" },
+  { latin: "SFERA PRIVATA", title: "私域资本笼", geometry: "cage" },
+  { latin: "MUNDUS SYSTEMA", title: "全球浑天仪", geometry: "armillary" },
+];
 
 export function buildTenWorldsModel(input: Analysis): TenWorldsModel {
   const analysis = analysisSchema.parse(input);
@@ -56,6 +73,7 @@ export function buildTenWorldsModel(input: Analysis): TenWorldsModel {
       y: index * verticalGap - centerOffset,
       radius: 2.65 + index * .1,
       color: palette[index],
+      instrument: instruments[index],
     };
   });
   const primary = [...layers].sort((left, right) => right.relevance - left.relevance

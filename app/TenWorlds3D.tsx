@@ -6,7 +6,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { CSS2DObject, CSS2DRenderer } from "three/examples/jsm/renderers/CSS2DRenderer.js";
 import type { Analysis } from "./analysis";
-import { buildTenWorldsModel } from "./tenWorldsModel";
+import { buildTenWorldsModel, type TenWorldLayer } from "./tenWorldsModel";
 import type { ConstraintHardness, SocialRelation } from "./socialWorlds";
 
 const relationLabels: Record<SocialRelation, string> = {
@@ -19,7 +19,7 @@ const hardnessLabels: Record<ConstraintHardness, string> = {
 
 type MembraneVisual = {
   membrane: THREE.Mesh<THREE.CylinderGeometry, THREE.MeshPhysicalMaterial>;
-  flywheel: THREE.Group;
+  mechanism: THREE.Group;
   label: CSS2DObject;
   gates: Map<string, THREE.Mesh>;
 };
@@ -28,6 +28,8 @@ function applyVisualState(visuals: Map<number, MembraneVisual>, selectedWorldID:
   for (const [worldID, visual] of visuals) {
     const active = worldID === selectedWorldID;
     const hovered = worldID === hoveredWorldID;
+    visual.mechanism.scale.setScalar(active ? 1.025 : hovered ? 1.012 : 1);
+    visual.mechanism.position.y = Number(visual.mechanism.userData.baseY) + (active ? .08 : hovered ? .035 : 0);
     visual.membrane.material.opacity = Number(visual.membrane.userData.baseOpacity) + (active ? .22 : hovered ? .13 : 0);
     visual.membrane.material.emissive.set(active || hovered ? visual.membrane.userData.color : 0x000000);
     visual.membrane.material.emissiveIntensity = active ? .24 : hovered ? .14 : 0;
@@ -53,12 +55,12 @@ function disposeScene(scene: THREE.Scene): void {
   });
 }
 
-function membraneLabel(index: number, label: string, color: number): CSS2DObject {
+function membraneLabel(index: number, label: string, instrument: string, color: number): CSS2DObject {
   const element = document.createElement("button");
   element.type = "button";
   element.className = "ten-world-label";
   element.style.setProperty("--world-color", `#${color.toString(16).padStart(6, "0")}`);
-  element.innerHTML = `<span>${String(index).padStart(2, "0")}</span><strong>${label}</strong>`;
+  element.innerHTML = `<span>${String(index).padStart(2, "0")}</span><span><strong>${label}</strong><em>${instrument}</em></span>`;
   const object = new CSS2DObject(element);
   object.center.set(0, .5);
   return object;
@@ -69,6 +71,165 @@ function circlePoints(radius: number, y: number, segments = 64): THREE.Vector3[]
     const angle = index * Math.PI * 2 / segments;
     return new THREE.Vector3(Math.cos(angle) * radius, y, Math.sin(angle) * radius);
   });
+}
+
+function drawingLine(points: THREE.Vector3[], color: number, opacity = .45, closed = false): THREE.Line | THREE.LineLoop {
+  const geometry = new THREE.BufferGeometry().setFromPoints(points);
+  const material = new THREE.LineBasicMaterial({ color, transparent: true, opacity });
+  return closed ? new THREE.LineLoop(geometry, material) : new THREE.Line(geometry, material);
+}
+
+function brassMesh(geometry: THREE.BufferGeometry, color = 0xb67b32, opacity = .78): THREE.Mesh {
+  return new THREE.Mesh(geometry, new THREE.MeshPhysicalMaterial({ color, transparent: true, opacity, roughness: .42, metalness: .38, clearcoat: .28, side: THREE.DoubleSide }));
+}
+
+function drawingTube(points: THREE.Vector3[], color: number, radius = .025, opacity = .68, closed = false): THREE.Mesh {
+  const curve = new THREE.CatmullRomCurve3(points, closed, "centripetal");
+  return brassMesh(new THREE.TubeGeometry(curve, Math.max(24, points.length * 8), radius, 8, closed), color, opacity);
+}
+
+function horizontalRing(radius: number, tube: number, color: number, opacity = .68): THREE.Mesh {
+  const ring = brassMesh(new THREE.TorusGeometry(radius, tube, 8, 72), color, opacity);
+  ring.rotation.x = Math.PI / 2;
+  return ring;
+}
+
+function archPoints(centerX: number, z: number, width: number, height: number): THREE.Vector3[] {
+  return Array.from({ length: 21 }, (_, index) => {
+    const angle = Math.PI - index * Math.PI / 20;
+    return new THREE.Vector3(centerX + Math.cos(angle) * width, .12 + Math.sin(angle) * height, z);
+  });
+}
+
+function buildMechanicalDrawing(parent: THREE.Group, layer: TenWorldLayer): THREE.Group {
+  const drawing = new THREE.Group();
+  const radius = layer.radius * .78;
+  const ink = layer.color;
+  const brass = 0xb98236;
+  parent.add(drawing);
+
+  switch (layer.instrument.geometry) {
+    case "sieve": {
+      for (let index = 0; index < 18; index++) {
+        const angle = index * Math.PI * 2 / 18;
+        const inner = .32 + index % 3 * .13;
+        drawing.add(drawingLine([new THREE.Vector3(Math.cos(angle) * inner, .09, Math.sin(angle) * inner), new THREE.Vector3(Math.cos(angle) * radius, .09, Math.sin(angle) * radius)], ink, .3));
+      }
+      [.46, .92, 1.42, radius].forEach((ringRadius, index) => drawing.add(horizontalRing(ringRadius, index === 3 ? .025 : .014, ink, .42)));
+      const cup = brassMesh(new THREE.CylinderGeometry(.22, .48, .25, 24), brass, .72);
+      cup.position.y = .16;
+      drawing.add(cup);
+      break;
+    }
+    case "aqueduct": {
+      [-.72, 0, .72].forEach((z, index) => drawing.add(drawingTube([new THREE.Vector3(-radius, .08 + index * .025, z), new THREE.Vector3(-radius * .3, .13, z + .08), new THREE.Vector3(radius * .35, .08, z - .06), new THREE.Vector3(radius, .12 + index * .02, z)], index === 1 ? brass : ink, index === 1 ? .045 : .025, .68)));
+      [-1.35, 0, 1.35].forEach((x) => {
+        const wheel = horizontalRing(.3, .035, brass, .78);
+        wheel.position.set(x, .12, 0);
+        drawing.add(wheel, drawingLine([new THREE.Vector3(x - .42, .11, -.42), new THREE.Vector3(x + .42, .11, .42)], ink, .35));
+      });
+      break;
+    }
+    case "network": {
+      const nodes = Array.from({ length: 7 }, (_, index) => {
+        const angle = -Math.PI / 2 + index * Math.PI * 2 / 7;
+        return new THREE.Vector3(Math.cos(angle) * radius, .12 + index % 2 * .05, Math.sin(angle) * radius);
+      });
+      nodes.forEach((node, index) => {
+        const knot = brassMesh(new THREE.TorusGeometry(.13 + index % 2 * .025, .035, 8, 28), index % 2 ? brass : ink, .82);
+        knot.rotation.x = Math.PI / 2;
+        knot.position.copy(node);
+        drawing.add(knot, drawingTube([node, nodes[(index + 2) % nodes.length], nodes[(index + 4) % nodes.length]], ink, .018, .4));
+      });
+      break;
+    }
+    case "monopoly": {
+      const spindle = brassMesh(new THREE.CylinderGeometry(.12, .18, .88, 18), ink, .82);
+      spindle.position.y = .48;
+      const counterweight = brassMesh(new THREE.SphereGeometry(.19, 18, 12), brass, .92);
+      counterweight.position.set(radius, .14, 0);
+      drawing.add(spindle, drawingTube([new THREE.Vector3(0, .58, 0), new THREE.Vector3(radius * .48, .38, 0), new THREE.Vector3(radius, .14, 0)], brass, .055, .82), counterweight, horizontalRing(radius * .58, .018, ink, .38));
+      [-.65, .65].forEach((z) => drawing.add(drawingLine([new THREE.Vector3(-radius * .7, .08, z), new THREE.Vector3(radius * .7, .08, z)], ink, .24)));
+      break;
+    }
+    case "market": {
+      const teeth = Array.from({ length: 48 }, (_, index) => {
+        const angle = index * Math.PI * 2 / 48;
+        const gearRadius = radius * (index % 2 === 0 ? 1 : .9);
+        return new THREE.Vector3(Math.cos(angle) * gearRadius, .11, Math.sin(angle) * gearRadius);
+      });
+      drawing.add(drawingLine(teeth, ink, .76, true), horizontalRing(radius * .46, .028, brass, .76));
+      for (let index = 0; index < 12; index++) {
+        const angle = index * Math.PI / 6;
+        drawing.add(drawingLine([new THREE.Vector3(Math.cos(angle) * .5, .1, Math.sin(angle) * .5), new THREE.Vector3(Math.cos(angle) * radius * .9, .1, Math.sin(angle) * radius * .9)], index % 3 === 0 ? brass : ink, .34));
+      }
+      break;
+    }
+    case "gate": {
+      [-1.18, 0, 1.18].forEach((x, index) => {
+        drawing.add(drawingTube(archPoints(x, 0, .43, .72 + index * .1), index === 1 ? brass : ink, index === 1 ? .045 : .025, .76));
+        drawing.add(drawingLine([new THREE.Vector3(x - .52, .1, -.48), new THREE.Vector3(x - .52, .1, .48), new THREE.Vector3(x + .52, .1, .48), new THREE.Vector3(x + .52, .1, -.48)], ink, .3));
+      });
+      drawing.add(drawingTube([new THREE.Vector3(-radius, .11, -.7), new THREE.Vector3(0, .11, -.7), new THREE.Vector3(radius, .11, -.7)], ink, .018, .42));
+      break;
+    }
+    case "vault": {
+      [.48, .94, 1.42, radius].forEach((ringRadius, index) => drawing.add(horizontalRing(ringRadius, index === 3 ? .035 : .018, index % 2 ? brass : ink, .66)));
+      for (let index = 0; index < 10; index++) {
+        const angle = index * Math.PI / 5;
+        drawing.add(drawingLine([new THREE.Vector3(Math.cos(angle) * .4, .11, Math.sin(angle) * .4), new THREE.Vector3(Math.cos(angle) * radius, .11, Math.sin(angle) * radius)], ink, .3));
+      }
+      const dial = brassMesh(new THREE.CylinderGeometry(.36, .36, .1, 30), brass, .72);
+      dial.position.y = .12;
+      drawing.add(dial);
+      break;
+    }
+    case "astrolabe": {
+      const core = brassMesh(new THREE.SphereGeometry(.16, 18, 12), brass, .9);
+      core.position.y = .38;
+      drawing.add(core);
+      [[0, 0, 0], [Math.PI / 2, 0, 0], [Math.PI / 3, Math.PI / 4, 0]].forEach((rotation, index) => {
+        const orbit = brassMesh(new THREE.TorusGeometry(1.12 + index * .2, .025 + index * .006, 8, 72), index === 1 ? brass : ink, .72);
+        orbit.position.y = .38;
+        orbit.rotation.set(rotation[0], rotation[1], rotation[2]);
+        drawing.add(orbit);
+      });
+      drawing.add(horizontalRing(radius, .02, ink, .34));
+      break;
+    }
+    case "cage": {
+      const dome = new THREE.Mesh(new THREE.SphereGeometry(radius * .72, 28, 12, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshBasicMaterial({ color: ink, wireframe: true, transparent: true, opacity: .3 }));
+      dome.scale.y = .58;
+      dome.position.y = .08;
+      drawing.add(dome, horizontalRing(radius * .74, .035, brass, .72), horizontalRing(radius, .018, ink, .34));
+      for (let index = 0; index < 6; index++) {
+        const angle = index * Math.PI / 3;
+        const lock = brassMesh(new THREE.BoxGeometry(.16, .22, .12), index % 2 ? brass : ink, .78);
+        lock.position.set(Math.cos(angle) * radius * .72, .18, Math.sin(angle) * radius * .72);
+        lock.rotation.y = -angle;
+        drawing.add(lock);
+      }
+      break;
+    }
+    case "armillary": {
+      const globe = new THREE.Mesh(new THREE.SphereGeometry(.88, 22, 12), new THREE.MeshBasicMaterial({ color: ink, wireframe: true, transparent: true, opacity: .18 }));
+      globe.position.y = .55;
+      drawing.add(globe);
+      [[0, 0, 0], [Math.PI / 2, 0, 0], [Math.PI / 3, Math.PI / 4, 0], [-Math.PI / 3, -Math.PI / 4, 0]].forEach((rotation, index) => {
+        const orbit = brassMesh(new THREE.TorusGeometry(1.18 + index * .14, .025, 8, 72), index % 2 ? brass : ink, .76);
+        orbit.position.y = .55;
+        orbit.rotation.set(rotation[0], rotation[1], rotation[2]);
+        drawing.add(orbit);
+      });
+      const crown = brassMesh(new THREE.ConeGeometry(.16, .42, 18), brass, .82);
+      crown.position.y = 1.92;
+      drawing.add(crown);
+      break;
+    }
+  }
+
+  drawing.userData.rotationSpeed = .00008 + layer.inertia * .0000016;
+  return drawing;
 }
 
 export default function TenWorlds3D({ input }: { input: Analysis }) {
@@ -116,8 +277,8 @@ export default function TenWorlds3D({ input }: { input: Analysis }) {
     scene.background = new THREE.Color(0xf2eee1);
     scene.fog = new THREE.Fog(0xf2eee1, 19, 36);
     const camera = new THREE.PerspectiveCamera(34, 1, .1, 100);
-    camera.position.set(11.8, 7.5, 14.2);
-    camera.lookAt(0, 0, 0);
+    camera.position.set(13.1, 8.3, 16.1);
+    camera.lookAt(0, .45, 0);
     renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -135,47 +296,33 @@ export default function TenWorlds3D({ input }: { input: Analysis }) {
 
     const clickable: THREE.Object3D[] = [];
     const visuals = new Map<number, MembraneVisual>();
-    const flywheels: THREE.Group[] = [];
+    const mechanisms: THREE.Group[] = [];
     const particles: THREE.Mesh[] = [];
     for (const layer of model.layers) {
+      const mechanism = new THREE.Group();
+      mechanism.position.y = layer.y;
+      mechanism.userData.baseY = layer.y;
+      scene.add(mechanism);
       const baseOpacity = .1 + layer.relevance / 420;
       const membrane = new THREE.Mesh(
         new THREE.CylinderGeometry(layer.radius, layer.radius, .07 + layer.viscosity / 850, 72),
-        new THREE.MeshPhysicalMaterial({ color: layer.color, transparent: true, opacity: baseOpacity, roughness: .68, metalness: .06, clearcoat: .22 }),
+        new THREE.MeshPhysicalMaterial({ color: layer.color, transparent: true, opacity: baseOpacity, roughness: .76, metalness: .04, clearcoat: .14 }),
       );
-      membrane.position.y = layer.y;
       membrane.userData = { worldID: layer.id, baseOpacity, color: layer.color };
-      scene.add(membrane);
+      mechanism.add(membrane);
       clickable.push(membrane);
-
-      const density = 4 + Math.round(layer.viscosity / 12);
-      for (let spoke = 0; spoke < density; spoke++) {
-        const angle = spoke * Math.PI / density;
-        const points = [
-          new THREE.Vector3(Math.cos(angle) * -layer.radius, layer.y + .07, Math.sin(angle) * -layer.radius),
-          new THREE.Vector3(Math.cos(angle) * layer.radius, layer.y + .07, Math.sin(angle) * layer.radius),
-        ];
-        scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), new THREE.LineBasicMaterial({ color: layer.color, transparent: true, opacity: .12 + layer.viscosity / 800 })));
-      }
-      const circles = 1 + Math.round(layer.viscosity / 24);
-      for (let circle = 1; circle <= circles; circle++) {
-        scene.add(new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(circlePoints(layer.radius * circle / (circles + 1), layer.y + .075)), new THREE.LineBasicMaterial({ color: layer.color, transparent: true, opacity: .12 })));
-      }
-
-      const flywheel = new THREE.Group();
-      const flywheelRadius = layer.radius + .12 + layer.inertia / 520;
-      const ring = new THREE.Mesh(new THREE.TorusGeometry(flywheelRadius, .025 + layer.inertia / 2600, 8, 90), new THREE.MeshStandardMaterial({ color: layer.color, roughness: .34, metalness: .38, transparent: true, opacity: .55 + layer.inertia / 240 }));
-      ring.rotation.x = Math.PI / 2;
-      flywheel.add(ring);
+      mechanism.add(drawingLine(circlePoints(layer.radius, .07), layer.color, .55, true));
+      const drawing = buildMechanicalDrawing(mechanism, layer);
+      mechanisms.push(drawing);
+      const carrierRadius = layer.radius + .13;
+      const ring = horizontalRing(carrierRadius, .016 + layer.inertia / 6000, layer.color, .48 + layer.inertia / 400);
+      mechanism.add(ring);
       for (let bead = 0; bead < 3; bead++) {
         const angle = bead * Math.PI * 2 / 3;
         const marker = new THREE.Mesh(new THREE.SphereGeometry(.055 + layer.inertia / 1800, 14, 10), new THREE.MeshStandardMaterial({ color: 0xb78338, emissive: 0x7d4e22, emissiveIntensity: .25 }));
-        marker.position.set(Math.cos(angle) * flywheelRadius, 0, Math.sin(angle) * flywheelRadius);
-        flywheel.add(marker);
+        marker.position.set(Math.cos(angle) * carrierRadius, .08, Math.sin(angle) * carrierRadius);
+        mechanism.add(marker);
       }
-      flywheel.position.y = layer.y + .04;
-      scene.add(flywheel);
-      flywheels.push(flywheel);
 
       const gates = new Map<string, THREE.Mesh>();
       layer.constraints.forEach((constraint, index) => {
@@ -186,18 +333,18 @@ export default function TenWorlds3D({ input }: { input: Analysis }) {
           new THREE.MeshPhysicalMaterial({ color: constraint.binding ? 0xb66a36 : 0xa88a58, roughness: .32, metalness: .34, transparent: true, opacity: constraint.binding ? .94 : .56 }),
         );
         gate.rotation.x = Math.PI / 2;
-        gate.position.set(Math.cos(angle) * distance, layer.y + .14, Math.sin(angle) * distance);
+        gate.position.set(Math.cos(angle) * distance, .14, Math.sin(angle) * distance);
         gate.userData = { worldID: layer.id, constraintID: constraint.id };
-        scene.add(gate);
+        mechanism.add(gate);
         gates.set(constraint.id, gate);
         clickable.push(gate);
       });
 
-      const label = membraneLabel(layer.id, layer.label, layer.color);
+      const label = membraneLabel(layer.id, layer.label, layer.instrument.title, layer.color);
       label.position.set(-layer.radius - .35, layer.y + .13, 0);
       label.element.addEventListener("click", () => selectWorldFromScene(layer.id));
       scene.add(label);
-      visuals.set(layer.id, { membrane, flywheel, label, gates });
+      visuals.set(layer.id, { membrane, mechanism, label, gates });
     }
     visualRef.current = visuals;
     const initialWorld = model.layers.find((layer) => layer.id === model.primaryWorldID) ?? model.layers[0];
@@ -221,7 +368,7 @@ export default function TenWorlds3D({ input }: { input: Analysis }) {
     controls.minDistance = 11;
     controls.maxDistance = 27;
     controls.autoRotate = !matchMedia("(prefers-reduced-motion: reduce)").matches;
-    controls.autoRotateSpeed = .22;
+    controls.autoRotateSpeed = .14;
 
     const raycaster = new THREE.Raycaster();
     const pointer = new THREE.Vector2();
@@ -269,12 +416,13 @@ export default function TenWorlds3D({ input }: { input: Analysis }) {
     observer.observe(canvas);
     resize();
     canvas.dataset.worldCount = "10";
+    canvas.dataset.mechanismCount = String(new Set(model.layers.map((layer) => layer.instrument.geometry)).size);
     canvas.dataset.constraintCount = String(model.layers.reduce((sum, layer) => sum + layer.constraints.length, 0));
     let frame = 0;
     const animate = (now: number) => {
       frame = requestAnimationFrame(animate);
       controls.update();
-      flywheels.forEach((flywheel, index) => { flywheel.rotation.y += .00015 + model.layers[index].inertia * .000003; });
+      mechanisms.forEach((mechanism) => { mechanism.rotation.y += Number(mechanism.userData.rotationSpeed); });
       const bottom = model.layers[0].y;
       const range = model.layers.at(-1)!.y - bottom + .55;
       particles.forEach((particle) => {
@@ -299,6 +447,7 @@ export default function TenWorlds3D({ input }: { input: Analysis }) {
       disposeScene(scene);
       labelRenderer.domElement.remove();
       renderer.dispose();
+      delete canvas.dataset.mechanismCount;
     };
   }, [model]);
 
@@ -306,12 +455,12 @@ export default function TenWorlds3D({ input }: { input: Analysis }) {
   return <section className="ten-worlds" aria-labelledby="ten-worlds-title">
     <canvas ref={canvasRef} aria-label="十重社会世界过滤膜" />
     {unsupported && <div className="ten-world-unsupported" role="status"><Filter size={21} /><strong>3D 场景不可用</strong><span>仍可通过十重世界索引查看每层过滤膜与硬约束。</span></div>}
-    <header className="ten-worlds-heading"><div><Filter size={17} /><div><p>十重世 · 社会雷诺数</p><h3 id="ten-worlds-title">你在哪一层被阻住</h3></div></div><a href="https://bestcoder.cn/%E5%8D%81%E9%87%8D%E4%B8%96" target="_blank" rel="noreferrer">理论原文<ExternalLink size={10} /></a></header>
+    <header className="ten-worlds-heading"><div><Filter size={17} /><div><p>MACHINA SOCIETATIS · 十重世</p><h3 id="ten-worlds-title">你在哪一层被阻住</h3></div></div><a href="https://bestcoder.cn/%E5%8D%81%E9%87%8D%E4%B8%96" target="_blank" rel="noreferrer">理论原文<ExternalLink size={10} /></a></header>
     <div className="ten-worlds-target"><ArrowUp size={14} /><span>试图推动</span><strong>{model.target}</strong></div>
-    <nav className="ten-worlds-nav" aria-label="十重社会世界">{model.layers.map((layer) => <button aria-pressed={layer.id === selected.id} className={layer.id === selected.id ? "is-active" : ""} style={{ "--world-color": `#${layer.color.toString(16).padStart(6, "0")}` } as CSSProperties} onClick={() => selectWorld(layer.id)} key={layer.id}><span>{String(layer.id).padStart(2, "0")}</span><strong>{layer.label}</strong><b>{layer.relevance}</b></button>)}</nav>
+    <nav className="ten-worlds-nav" aria-label="十重社会世界">{model.layers.map((layer) => <button aria-pressed={layer.id === selected.id} className={layer.id === selected.id ? "is-active" : ""} style={{ "--world-color": `#${layer.color.toString(16).padStart(6, "0")}` } as CSSProperties} onClick={() => selectWorld(layer.id)} key={layer.id}><span>{String(layer.id).padStart(2, "0")}</span><div><strong>{layer.label}</strong><em>{layer.instrument.title}</em></div><b>{layer.relevance}</b></button>)}</nav>
     <aside className="ten-world-detail" style={{ "--world-color": `#${selected.color.toString(16).padStart(6, "0")}` } as CSSProperties}>
-      <header><span>第 {selected.id} 重</span><strong>{relation}</strong><b>关联 {selected.relevance}</b></header>
-      <h4>{selected.label}</h4><p className="ten-world-prototype">文章原型：{selected.prototype}</p>
+      <header><span>FOLIO {String(selected.id).padStart(2, "0")}</span><strong>{selected.instrument.latin}</strong><b>{relation} · {selected.relevance}</b></header>
+      <h4>{selected.label}</h4><p className="ten-world-instrument">{selected.instrument.title}</p><p className="ten-world-prototype">文章原型：{selected.prototype}</p>
       <p className="ten-world-diagnosis">{selected.diagnosis}</p>
       <div className="reynolds-meters"><div><span>环境黏性</span><b>{selected.viscosity}</b><i><em style={{ width: `${selected.viscosity}%` }} /></i></div><div><span>积累惯性</span><b>{selected.inertia}</b><i><em style={{ width: `${selected.inertia}%` }} /></i></div></div>
       <div className="hard-constraint-list"><header><Landmark size={13} /><span>本层硬约束</span></header>{selected.constraints.map((constraint) => <button aria-pressed={constraint.id === selectedConstraint.id} className={`${constraint.id === selectedConstraint.id ? "is-active" : ""} ${constraint.binding ? "is-binding" : ""}`} onClick={() => setSelectedConstraintID(constraint.id)} key={constraint.id}><span>{hardnessLabels[constraint.hardness]}</span><strong>{constraint.label}</strong>{constraint.binding && <b>当前绑定</b>}</button>)}</div>

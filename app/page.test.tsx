@@ -74,7 +74,8 @@ describe("Home", () => {
     expect(screen.getByText("导航模型")).toBeInTheDocument();
     expect(screen.getByLabelText("十重社会世界过滤膜")).toBeInTheDocument();
     expect(screen.getByText("你在哪一层被阻住")).toBeInTheDocument();
-    expect(screen.getByText("十重世 · 社会雷诺数")).toBeInTheDocument();
+    expect(screen.getByText("MACHINA SOCIETATIS · 十重世")).toBeInTheDocument();
+    expect(screen.getAllByText("市场齿轮").length).toBeGreaterThan(0);
     expect(await screen.findByText("3D 场景不可用")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /理论原文/ })).toHaveAttribute("href", "https://bestcoder.cn/%E5%8D%81%E9%87%8D%E4%B8%96");
     expect(screen.getAllByText("高竞争城市市场").length).toBeGreaterThanOrEqual(2);
